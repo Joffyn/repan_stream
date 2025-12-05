@@ -1,0 +1,55 @@
+body {
+	font-family: sans-serif;
+	text-align: center;
+    color: rgb(0, 0, 0) 
+}
+.calendar {
+    width: 300px;
+    border: 1px solid #ccc;
+    font-family: sans-serif;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px;
+    background: #f4f4f4;
+    font-weight: bold;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+}
+
+.weekday {
+    font-weight: bold;
+    background: #eee;
+}
+
+.day {
+    padding: 5px;
+    cursor: pointer;
+}
+
+.day:hover {
+    background: #ddd;
+}
+.dayhasjams
+{
+    background: #afa;
+}
+.daynojams
+{
+    background: #faa;
+}
+
+.empty {
+    background: transparent;
+}
+.jam-select
+{
+  cursor: pointer;
+  font-weight: bold;
+}
