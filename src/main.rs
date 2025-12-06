@@ -17,11 +17,22 @@ async fn main()
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
 
-    use repan_stream::app::*;
+    use repan_stream::backend::database::get_database;
+    use repan_stream::{app::*, backend};
     use repan_stream::app::gstmod::gstserver::*;
     use gstreamer::{self as gst, glib::property::PropertyGet, prelude::{GstBinExtManual, GstObjectExt, ObjectExt}};
     
-    gst::init().expect("to initialize gstreamer");
+    gst::init().unwrap();
+
+    match get_database()
+    {
+        Err(e) => 
+        {
+            eprintln!("{:?}", e);
+            return; 
+        }
+        _ => (),
+    }
     
 
     let pipelines = Arc::new(RwLock::new(HashMap::<String, PipelineHandle>::new()));

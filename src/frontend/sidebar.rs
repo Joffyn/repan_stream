@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::backend::{database::database::JamQueryResult, serverfunctions::{get_all_jams, get_tracks}};
+use crate::backend::{database::JamQueryResult, serverfunctions::{get_all_jams, get_tracks}};
 
 #[component]
 pub fn Sidebar() -> impl IntoView

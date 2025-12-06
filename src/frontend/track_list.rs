@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use crate::backend::{database::database::JamQueryResult, serverfunctions::get_track_list}; 
+use crate::backend::{database::JamQueryResult, serverfunctions::get_track_list}; 
 
 #[component]
 pub fn TrackList(selected_jam_id: ReadSignal<i64>) -> impl IntoView

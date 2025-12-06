@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use crate::backend::{database::database::JamQueryResult, serverfunctions::get_all_jams_from_day};
+use crate::backend::{database::JamQueryResult, serverfunctions::get_all_jams_from_day};
 
 #[component]
 pub fn JamSelector(selected_day: ReadSignal<String>, set_selected_jam_id: WriteSignal<i64>) -> impl IntoView 

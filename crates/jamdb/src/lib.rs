@@ -1,8 +1,27 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::path::Path;
 use std::fs::{self};
 use regex::Regex;
 use serde::{Serialize, Deserialize};
+use rusqlite::{Connection, params};
+
+//fn create_and_add_jams(db: &mut app::database::Database)
+//{
+//    use std::path::Path;
+//    let directories = vec![Path::new("/home/joffy/audio-stream/audio/")];
+//
+//    let jams = app::projectparser::get_all_jams_from_dirs(&directories);
+//
+//    for jam in jams 
+//    {
+//        match db.add_jam(&jam)
+//        {
+//            Ok(()) => println!("Added: {} to database", jam.date),
+//            Err(e) => eprintln!("Failed to add: {} to database, error: {}", jam.date, e),
+//        }
+//    }
+//}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Jam
@@ -12,7 +31,7 @@ pub struct Jam
     pub tracks: Vec<String>,
 }
 
-fn walk_directories(dir: &Path, jam_map: &mut HashMap<String, Jam>) 
+pub fn walk_directories(dir: &Path, jam_map: &mut HashMap<String, Jam>) 
 {
     //Move regex initializion to separate function
     let regex = Regex::new(r"([0-9]{6}_[0-9]{4})").unwrap();
@@ -115,3 +134,43 @@ pub fn scan_and_save_jams(directories: &Vec<&Path>, save_path: &str) -> std::io:
 
 }
 
+pub fn add_jam(conn: &mut Connection, jam: &Jam) -> Result<(), Box<dyn Error>>
+{
+
+    let mut check_if_exists = conn.prepare("SELECT EXISTS(SELECT 1 FROM jams WHERE date = ?1)")?;
+
+    if check_if_exists.query_row([&jam.date], |row| row.get(0))?
+    {
+        println!("Attempted to add jam: {} that already exists", &jam.date);
+        return Ok(());
+    }
+
+
+    conn.execute("INSERT INTO jams (date, path) VALUES (:date, :path)", 
+        &[(":date", &jam.date), (":path", &jam.path)])?;
+
+    let jam_id = conn.last_insert_rowid();
+
+    let mut statement = conn.prepare("INSERT INTO tracks (jam_id, track) VALUES (?1, ?2)")?;
+
+    for track in &jam.tracks
+    {
+        statement.execute(params![jam_id, track])?;
+    }
+    Ok(())
+}
+pub fn create_jam_table(conn: &mut Connection)
+{
+    conn.execute_batch(" BEGIN;
+        CREATE TABLE IF NOT EXISTS jams
+        ( id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          path TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS tracks
+        ( id INTEGER PRIMARY KEY AUTOINCREMENT,
+          jam_id INTEGER NOT NULL,
+          track TEXT NOT NULL,
+          FOREIGN KEY(jam_id) REFERENCES jams(id));
+        COMMIT;",).unwrap();
+
+}
