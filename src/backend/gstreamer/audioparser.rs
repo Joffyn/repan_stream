@@ -1,9 +1,9 @@
 use gstreamer::{self as gst, Element, Pipeline, glib};
 use gst::prelude::*;
 
-pub fn create_audiopipeline(tracks: &Vec<String>, rtmptarget: &str) -> Result<gst::Pipeline, glib::error::BoolError>
+pub fn create_audiopipeline(tracks: &Vec<String>, user_id: &str) -> Result<gst::Pipeline, glib::error::BoolError>
 {
-    let pipeline = gst::Pipeline::with_name(rtmptarget);
+    let pipeline = gst::Pipeline::with_name(user_id);
 
     let mixer = gst::ElementFactory::make("audiomixer")
         .build()?;
@@ -43,13 +43,20 @@ pub fn create_audiopipeline(tracks: &Vec<String>, rtmptarget: &str) -> Result<gs
 
      let muxer_sinkpad = muxer.request_pad_simple("audio")?;
      encoder_srcpad.link(&muxer_sinkpad)?;
+    
 
-    let rtmpsink = gst::ElementFactory::make("rtmpsink")
-        .name("rtmpsink")
-        .property("location", rtmptarget)
-        .build()?;
+     let webrtc = ElementFactory::make("webrtcbin", Some(&format!("webrtc-{}", user_id)))
+         .property("")
 
-     pipeline.add(&rtmpsink)?;
+
+
+
+     let rtmpsink = gst::ElementFactory::make("rtmpsink")
+         .name("rtmpsink")
+         .property("location", user_id)
+         .build()?;
+
+    pipeline.add(&rtmpsink)?;
 
     muxer.link(&rtmpsink)?;
     Ok(pipeline)

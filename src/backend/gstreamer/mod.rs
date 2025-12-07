@@ -2,3 +2,4 @@ pub mod pipelinemap;
 pub mod gstserver;
 pub mod sockethandler;
 pub mod audioparser;
+pub mod webrtc_connection;
