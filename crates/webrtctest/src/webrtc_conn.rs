@@ -1,12 +1,14 @@
 use std::sync::{Arc, Weak};
 
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use async_tungstenite::tungstenite;
-use gstreamer::{self as gst, Pipeline, StructureRef};
+use futures_util::{Stream, stream::futures_unordered};
+use gstreamer::{self as gst, Pipeline, StructureRef, glib::GString};
 use gst::prelude::*;
-use gstreamer_webrtc::{WebRTCSessionDescription, gst::Message};
+use gstreamer_webrtc::{WebRTCSDPType, WebRTCSessionDescription, gst::Message, gst_sdp};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::{sync::{futures, mpsc::{self, UnboundedReceiver}}};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 const STUN_SERVER: &str = "stun://stun.l.google.com:19302";
 
@@ -41,13 +43,13 @@ enum JsonMsg {
 }
 
 #[derive(Debug, Clone)]
-struct UserConn(Arc<UserConnectionInner>);
+pub struct UserConn(Arc<UserConnectionInner>);
 
 #[derive(Debug, Clone)]
 struct WeakConn(Weak<UserConnectionInner>);
 
 #[derive(Debug)]
-struct UserConnectionInner
+pub struct UserConnectionInner
 {
     pipeline: gst::Pipeline,
     webrtcbin: gst::Element,
@@ -85,7 +87,7 @@ impl UserConn
     }
 
 
-    fn new() -> Result<Self, anyhow::Error>
+    pub fn new() -> Result<(Self, impl Stream<Item = gstreamer::Message>, impl Stream<Item = tungstenite::Message>), anyhow::Error>
     {
 
         let pipeline = gst::parse::launch(
@@ -102,6 +104,7 @@ impl UserConn
         let bus = pipeline.bus().unwrap();
         let send_gst_msg_rx = bus.stream();
 
+        
         let (send_ws_msg_tx, send_ws_msg_rx) = mpsc::unbounded_channel::<tungstenite::Message>();
 
         pipeline.call_async(|pipeline: &Pipeline|
@@ -174,7 +177,7 @@ impl UserConn
                 }
 
             });
-        Ok(conn)
+        Ok((conn, send_gst_msg_rx, UnboundedReceiverStream::new(send_ws_msg_rx)))
     }
 
 
@@ -201,8 +204,6 @@ impl UserConn
 
     fn on_offer_created(&self,reply: Result<Option<&StructureRef>, gst::PromiseError>) -> Result<(), anyhow::Error>
     {
-
-
         let reply = match reply
         {
             Ok(reply) => reply,
@@ -301,6 +302,161 @@ impl UserConn
         let sinkpad = sink.static_pad("sink").unwrap();
         pad.link(&sinkpad)
             .with_context(|| format!("can't link sink for stream {:?}", caps))?;
+
+        Ok(())
+    }
+
+    // Once webrtcbin has create the answer SDP for us, handle it by sending it to the peer via the
+    // WebSocket connection
+    fn on_answer_created(
+        &self,
+        reply: Result<Option<&StructureRef>, gst::PromiseError>,
+    ) -> Result<(), anyhow::Error> 
+    {
+        let reply = match reply 
+        {
+            Ok(reply) => reply,
+            Err(err) => 
+            {
+                bail!("Answer creation future got no reponse: {:?}", err);
+            }
+        };
+
+        let answer = reply
+            .unwrap()
+            .value("answer")
+            .unwrap()
+            .get::<WebRTCSessionDescription>()
+            .unwrap();
+
+        self.webrtcbin
+            .emit_by_name::<()>("set-local-description", &[&answer, &None::<gst::Promise>]);
+
+        println!(
+            "sending SDP answer to peer: {}",
+            answer.sdp().as_text().unwrap()
+        );
+
+        let message = serde_json::to_string(&JsonMsg::Sdp {
+            type_: "answer".to_string(),
+            sdp: answer.sdp().as_text().unwrap(),
+        })
+        .unwrap();
+
+        self.send_msg_tx.send(tungstenite::Message::text(message)).with_context(|| format!("Failed to send SDP answer"))?;
+
+        Ok(())
+    }
+    pub fn handle_websocket_message(&self, msg: &str) -> Result<(), anyhow::Error>
+    {
+        if msg.starts_with("ERROR") 
+        {
+            bail!("Got error message: {}", msg);
+        }
+
+        println!("{}", msg);
+        let json_msg: JsonMsg = serde_json::from_str(msg)?;
+
+        match json_msg 
+        {
+            JsonMsg::Sdp { type_, sdp } => self.handle_sdp(&type_, &sdp),
+            JsonMsg::Ice 
+            {
+                sdp_mline_index,
+                candidate,
+            } => self.handle_ice(sdp_mline_index, &candidate),
+        }
+    }
+    // Handle GStreamer messages coming from the pipeline
+    pub fn handle_pipeline_message(&self, message: &gst::Message) -> Result<(), anyhow::Error> 
+    {
+        use gst::message::MessageView;
+
+        match message.view() 
+        {
+            MessageView::Error(err) => bail!(
+                "Error from element {}: {} ({})",
+                err.src()
+                    .map(|s| String::from(s.path_string()))
+                    .unwrap_or_else(|| String::from("None")),
+                err.error(),
+                err.debug().unwrap_or_else(|| GString::from("None")),
+            ),
+            MessageView::Warning(warning) => 
+            {
+                println!("Warning: \"{}\"", warning.debug().unwrap());
+            }
+            _ => (),
+        }
+
+        Ok(())
+    }
+    fn handle_sdp(&self, type_: &str, sdp: &str) -> Result<(), anyhow::Error> {
+        if type_ == "answer" 
+        {
+            print!("Received answer:\n{}\n", sdp);
+
+            let ret = gst_sdp::SDPMessage::parse_buffer(sdp.as_bytes())
+                .map_err(|_| anyhow!("Failed to parse SDP answer"))?;
+            let answer =
+                WebRTCSessionDescription::new(WebRTCSDPType::Answer, ret);
+
+            self.webrtcbin
+                .emit_by_name::<()>("set-remote-description", &[&answer, &None::<gst::Promise>]);
+
+            Ok(())
+        } 
+        else if type_ == "offer" 
+        {
+            print!("Received offer:\n{}\n", sdp);
+
+            let ret = gst_sdp::SDPMessage::parse_buffer(sdp.as_bytes())
+                .map_err(|_| anyhow!("Failed to parse SDP offer"))?;
+
+            // And then asynchronously start our pipeline and do the next steps. The
+            // pipeline needs to be started before we can create an answer
+            let app_clone = self.downgrade();
+            self.pipeline.call_async(move |_pipeline| {
+                let app = upgrade_weak!(app_clone);
+
+                let offer = WebRTCSessionDescription::new(
+                    WebRTCSDPType::Offer,
+                    ret,
+                );
+
+                app.0
+                    .webrtcbin
+                    .emit_by_name::<()>("set-remote-description", &[&offer, &None::<gst::Promise>]);
+
+                let app_clone = app.downgrade();
+                let promise = gst::Promise::with_change_func(move |reply| 
+                {
+                    let app = upgrade_weak!(app_clone);
+
+                    if let Err(e) = app.on_answer_created(reply) 
+                    {
+                        eprintln!("{:?}", e);
+                    }
+                });
+
+                app.0
+                    .webrtcbin
+                    .emit_by_name::<()>("create-answer", &[&None::<gst::Structure>, &promise]);
+                });
+
+            Ok(())
+        } 
+        else 
+        {
+            bail!("Sdp type is not \"answer\" but \"{}\"", type_)
+        }
+    }
+
+    // Handle incoming ICE candidates from the peer by passing them to webrtcbin
+    fn handle_ice(&self, sdp_mline_index: u32, candidate: &str) -> Result<(), anyhow::Error> 
+    {
+        self.webrtcbin
+            .emit_by_name::<()>("add-ice-candidate", &[&sdp_mline_index, &candidate]);
 
         Ok(())
     }
