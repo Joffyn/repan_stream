@@ -1,8 +1,8 @@
-#[cfg(feature = "ssr")]
 use leptos::prelude::*;
+use leptos::server;
 
-use crate::backend::database::get_database;
 #[cfg(feature = "ssr")]
+use crate::backend::database::get_database;
 use crate::backend::database::{QueryAmount, JamQueryResult, QueryTarget};
 
 

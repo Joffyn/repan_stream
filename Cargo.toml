@@ -7,7 +7,6 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-gstreamer = { version = "0.23.4", optional = true }
 leptos = { version = "0.8.0", features = ["nightly"] }
 leptos_router = { version = "0.8.0", features = ["nightly"] }
 axum = { version = "0.8.0", optional = true }
@@ -15,7 +14,8 @@ console_error_panic_hook = { version = "0.1", optional = true }
 leptos_axum = { version = "0.8.0", optional = true }
 leptos_meta = { version = "0.8.0" }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
-wasm-bindgen = { version = "=0.2.100", optional = true }
+wasm-bindgen = { version = "= 0.2.100", optional = true }
+wasm-bindgen-futures = "0.4.50"
 regex = "1.11.1"
 serde = { version = "1.0.219", derived = true }
 serde_json = "1.0"
@@ -23,7 +23,22 @@ rusqlite = { version = "0.37.0", features = ["bundled"], optional = true }
 chrono = "0.4.41"
 num-traits = "0.2.19"
 anyhow = "1.0.100"
-gstreamer-webrtc = { version = "0.24.4", optional = true }
+futures = "0.3.31"
+once_cell = "1.21.3"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "MessageEvent",
+  "RtcPeerConnection",
+  "RtcSignalingState",
+  "RtcSdpType",
+  "RtcSessionDescriptionInit",
+  "RtcPeerConnectionIceEvent",
+  "RtcIceCandidate",
+  "RtcDataChannel",
+  "RtcDataChannelEvent",
+]
 
 [features]
 hydrate = [
@@ -33,8 +48,6 @@ hydrate = [
 ]
 ssr = [
     "dep:axum",
-    "dep:gstreamer",
-    "dep:gstreamer-webrtc",
     "dep:tokio",
     "dep:leptos_axum",
     "dep:rusqlite",

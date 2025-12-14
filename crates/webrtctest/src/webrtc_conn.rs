@@ -216,10 +216,10 @@ impl UserConn
             .get::<WebRTCSessionDescription>()
             .unwrap();
 
-        println!(
-            "sending SDP offer to peer: {}",
-            offer.sdp().as_text().unwrap()
-        );
+        //println!(
+        //    "sending SDP offer to peer: {}",
+        //    offer.sdp().as_text().unwrap()
+        //);
 
         self.webrtcbin
             .emit_by_name::<()>("set-local-description", &[&offer, &None::<gst::Promise>]);
@@ -356,6 +356,7 @@ impl UserConn
 
         println!("{}", msg);
         let json_msg: JsonMsg = serde_json::from_str(msg)?;
+        println!("Parsed as Json");
 
         match json_msg 
         {

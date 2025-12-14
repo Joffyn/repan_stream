@@ -36,31 +36,30 @@ pub fn Calendar() -> impl IntoView {
 
     view! {
         <div class="calendar">
-        <div class="calendar-header">
-        <button on:click=prev_month>{"<"}</button>
-        <span>{move || format!("{} {}", Month::from_u32(month()).unwrap().name(), year())}</span>
-            <button on:click=next_month>{">"}</button>
+            <div class="calendar-header">
+                <button on:click=prev_month>{"<"}</button>
+                <span>
+                    {move || format!("{} {}", Month::from_u32(month()).unwrap().name(), year())}
+                </span>
+                <button on:click=next_month>{">"}</button>
             </div>
 
             <div class="calendar-grid">
-                { // Weekday headers
-                    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-                        .into_iter()
-                        .map(|d| view! { <div class="weekday">{d}</div> })
-                        .collect::<Vec<_>>()
+                // Weekday headers
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+                    .into_iter()
+                    .map(|d| view! { <div class="weekday">{d}</div> })
+                    .collect::<Vec<_>>()}
+                // Empty slots before first day
+                {(0..first_weekday_offset())
+                    .map(|_| view! { <div class="empty"></div> })
+                    .collect::<Vec<_>>()}
+                // Days of month
+                {
+                    view! { <Days month=month year=year /> }
                 }
-
-                { // Empty slots before first day
-                (0..first_weekday_offset())
-                .map(|_| view! { <div class="empty"></div> })
-                .collect::<Vec<_>>()
-    }
-
-    { // Days of month
-    view!{ <Days month=month year=year/>}
-    }
-    </div>
-    </div>
+            </div>
+        </div>
     }
 }
 
@@ -96,51 +95,46 @@ fn Days(month: ReadSignal<u32>, year: ReadSignal<i32>) -> impl IntoView
 
 
 
-    view!{
-        <Suspense fallback=move || {view! {<p>"Loading..."</p>}}>
-        {
-            move || Suspend::new(async move
-                {
-                    let jams = jams_res.await;
+    view! {
+        <Suspense fallback=move || {
+            view! { <p>"Loading..."</p> }
+        }>
+            {move || Suspend::new(async move {
+                let jams = jams_res.await;
+                let (ids, data) = match jams {
+                    Ok(jams) => jams.into_iter().map(|r| (r.id, r.data)).unzip(),
+                    Err(_) => (vec![-1], vec![0]),
+                };
+                let days: Vec<u32> = vec![1..days_in_month() + 1]
+                    .into_iter()
+                    .flat_map(|r| r.collect::<Vec<u32>>())
+                    .collect();
 
-                    let (ids, data) = match jams {
-                        Ok(jams) => jams.into_iter().map(|r| (r.id, r.data)).unzip(),
-                        Err(_) => (vec![-1], vec![0]),
-                    };
-                    let days: Vec<u32> = vec![1..days_in_month() + 1].into_iter().flat_map(|r| r.collect::<Vec<u32>>()).collect();
-
-                    view!
-                    {
-                        <For 
-                            each=move|| days.clone()
-                            key=|state| state.clone()
-                            let(child)>
-                            <div class="day" on:click=move |_| 
-                            {
+                view! {
+                    <For each=move || days.clone() key=|state| state.clone() let(child)>
+                        <div
+                            class="day"
+                            on:click=move |_| {
                                 let y = year.get();
                                 let m = month.get();
                                 let d = child;
                                 let full_date = format!("{:02}{:02}{:02}", y % 100, m, d);
-
                                 *set_day.write() = full_date;
-                            }>
-                        {   
-
-                            if data.contains(&child)
-                            { 
+                            }
+                        >
+                            {
+                            if data.contains(&child) {
                                 view! { <div class="dayhasjams">{child}</div> }.into_view()
+                            } else {
 
-                            } else 
-                            { 
+                                view! { <div class="daynojams">{child}</div> }
+                                    .into_view()
+                            }}
 
-                                view! { <div class="daynojams">{child}</div> }.into_view()
-                            } 
-
-                        }</div>
-                        </For>
-                    }
-                })
-        }
+                        </div>
+                    </For>
+                }
+            })}
         </Suspense>
     }
 }

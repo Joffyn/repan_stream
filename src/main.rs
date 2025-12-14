@@ -1,28 +1,26 @@
 #![allow(warnings)]
 #![warn(unused_variables)]
-use repan_stream::app::frontend::pipelinemap::PipelineMap;
+use axum::{extract::{WebSocketUpgrade, ws::{Message, WebSocket}}, response::IntoResponse};
+use futures::{SinkExt, StreamExt, stream::{SplitSink, SplitStream}};
 use leptos::config::LeptosOptions;
-use std::sync::{Arc, RwLock};
+use repan_stream::{backend::database::Database, frontend::webrtc::GSTREAMER_SENDER};
+use leptos::{logging::log, prelude::provide_context};
+use tokio::{stream, sync::mpsc::{Receiver, Sender, channel}};
 
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() 
 {
-
     use std::collections::HashMap;
 
     use axum::Router;
-    use leptos::{logging::log, prelude::provide_context};
+    use axum::routing::{any, get};
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
 
     use repan_stream::backend::database::get_database;
     use repan_stream::{app::*, backend};
-    use repan_stream::app::gstmod::gstserver::*;
-    use gstreamer::{self as gst, glib::property::PropertyGet, prelude::{GstBinExtManual, GstObjectExt, ObjectExt}};
-    
-    gst::init().unwrap();
 
     match get_database()
     {
@@ -31,12 +29,9 @@ async fn main()
             eprintln!("{:?}", e);
             return; 
         }
-        _ => (),
+        _ => println!("Database loaded"),
     }
     
-
-    let pipelines = Arc::new(RwLock::new(HashMap::<String, PipelineHandle>::new()));
-
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
@@ -46,7 +41,8 @@ async fn main()
 
 
     let app = Router::new()
-        .leptos_routes_with_context(&leptos_options, routes, move || provide_context(pipelines.clone()) ,{
+        .route("/ws", any(ws_handler))
+        .leptos_routes(&leptos_options, routes, {
             let leptos_options = leptos_options.clone();
             move || shell(leptos_options.clone())
         })
@@ -61,9 +57,83 @@ async fn main()
         .await
         .unwrap();
 
-    log!("Gstreamer pipeline started");
 }
-fn main() 
-{
 
+async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse
+{
+    log!("Connected!");
+    ws.on_failed_upgrade(|e| eprintln!("{:?}", e))
+        .on_upgrade(handle_socket)
+}
+async fn handle_socket(mut socket: WebSocket)
+{
+    use axum::extract::ws::Utf8Bytes;
+
+    socket.send(Message::Text(Utf8Bytes::from_static("Hello!")));
+    log!("Socket being handled");
+    let (mut client_tx, mut client_rx) = tokio::sync::mpsc::channel::<String>(128);
+
+    let (mut streamer_sender, mut streamer_receiver) = socket.split();
+    let client_to_streamer =  GSTREAMER_SENDER.clone();
+    *client_to_streamer.write().await = Some(client_tx);
+
+    tokio::spawn(handle_client_messages(streamer_sender, client_rx));
+    tokio::spawn(handle_streamer_messages(streamer_receiver));
+    //loop
+    //{
+
+    //    match client_rx.recv().await
+    //    {
+    //        Some(msg) =>
+    //        {
+    //            log!("Sent message from server!");
+    //            streamer_sender.send(Message::Text(Utf8Bytes::from(msg)));
+    //        },
+    //        _ => (),
+    //    }
+    //    match streamer_receiver.next().await
+    //    {
+    //        Some(Ok(msg)) => log!("{:?}", msg),
+    //        Some(Err(e)) => log!("{:?}", e),
+    //        None => 
+    //        {
+    //            log!("Socket ended");
+    //            break;
+    //        }
+    //    }
+
+    //}
+    log!("Socket disconnecting");
+}
+async fn handle_client_messages(mut tx: SplitSink<WebSocket, Message>, mut rx: Receiver<String>)
+{
+    use axum::extract::ws::Utf8Bytes;
+    loop
+    {
+        match rx.recv().await
+        {
+            Some(msg) =>
+            {
+                log!("Sent message from server!");
+                let _ = tx.send(Message::Text(Utf8Bytes::from(msg))).await;
+            },
+            _ => (),
+        }
+    }
+}
+async fn handle_streamer_messages(mut rx: SplitStream<WebSocket>)
+{
+    loop
+    {
+        match rx.next().await
+        {
+            Some(Ok(msg)) => log!("{:?}", msg.to_text().unwrap()),
+            Some(Err(e)) => log!("{:?}", e.to_string()),
+            None => 
+            {
+                log!("Socket ended");
+                break;
+            }
+        }
+    }
 }
