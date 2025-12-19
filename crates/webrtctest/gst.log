@@ -1,0 +1,12 @@
+0:00:03.224603870 [34m19143[00m 0x5a2ba8f5f060 [33;01mLOG    [00m [00m           webrtcbin gstwebrtcbin.c:2471:_create_webrtc_transceiver:<webrtcbin>[00m created new transceiver <webrtctransceiver0> with direction sendrecv (4), mline 4294967295, kind unknown (0)
+0:00:03.224685591 [34m19143[00m 0x5a2ba8f5f060 [33;01mLOG    [00m [00m           webrtcbin gstwebrtcbin.c:8279:gst_webrtc_bin_request_new_pad:<webrtcbin>[00m Created new transceiver <webrtctransceiver0>
+0:00:03.224844926 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:484:gst_webrtc_bin_pad_new:<'':sink_0>[00m new visible pad with direction sink
+0:00:03.225036249 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8002:gst_webrtc_bin_change_state:[00m changing state: NULL => READY
+0:00:03.225219569 [34m19143[00m 0x5a2ba8f5f060 [33;01mLOG    [00m [00m           webrtcbin gstwebrtcbin.c:1760:_check_if_negotiation_is_needed:<webrtcbin>[00m checking if negotiation is needed
+0:00:03.225243312 [34m19143[00m 0x5a2ba8f5f060 [33;01mLOG    [00m [00m           webrtcbin gstwebrtcbin.c:1765:_check_if_negotiation_is_needed:<webrtcbin>[00m no negotiation possible until caps have been received on all sink pads
+0:00:03.225377514 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8002:gst_webrtc_bin_change_state:[00m changing state: READY => PAUSED
+0:00:03.225829274 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8002:gst_webrtc_bin_change_state:[00m changing state: PAUSED => PLAYING
+0:00:03.226182861 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8002:gst_webrtc_bin_change_state:[00m changing state: PLAYING => PAUSED
+0:00:03.226307044 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8002:gst_webrtc_bin_change_state:[00m changing state: PAUSED => READY
+0:00:03.226975201 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8002:gst_webrtc_bin_change_state:[00m changing state: READY => NULL
+0:00:03.227460247 [34m19143[00m 0x5a2ba8f5f060 [37mDEBUG  [00m [00m           webrtcbin gstwebrtcbin.c:8335:gst_webrtc_bin_release_pad:<webrtcbin>[00m Releasing <webrtcbin:sink_0>

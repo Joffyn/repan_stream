@@ -28,7 +28,7 @@ macro_rules! upgrade_weak {
 
 // JSON messages we communicate with
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", untagged)]
 enum JsonMsg {
     Ice {
         candidate: String,
@@ -124,59 +124,59 @@ impl UserConn
 
         let conn_clone = conn.downgrade();
 
-        let _ = conn.webrtcbin
-            .connect("on-negotiation-needed", false, move |values|
-                {
-                    let _webrtc = values[0].get::<gst::Element>().unwrap();
-                    let conn = upgrade_weak!(conn_clone, None);
-                    if let Err(e) = conn.on_negotation_needed()
-                    {
-                        eprintln!("{:?}", e);
-                    }
-                    None
-                });
+        //let _ = conn.webrtcbin
+        //    .connect("on-negotiation-needed", false, move |values|
+        //        {
+        //            let _webrtc = values[0].get::<gst::Element>().unwrap();
+        //            let conn = upgrade_weak!(conn_clone, None);
+        //            if let Err(e) = conn.on_negotation_needed()
+        //            {
+        //                eprintln!("{:?}", e);
+        //            }
+        //            None
+        //        });
 
 
-        let conn_clone = conn.downgrade();
+        //let conn_clone = conn.downgrade();
 
-        let _ = conn.webrtcbin
-            .connect("on-ice-candidate", false, move |values|
-                {
-                    let _webrtc = values[0].get::<gst::Element>().unwrap();
-                    let mlineindex = values[1].get::<u32>().unwrap();
-                    let candidate = values[2]
-                        .get::<String>()
-                        .unwrap();
+        //let _ = conn.webrtcbin
+        //    .connect("on-ice-candidate", false, move |values|
+        //        {
+        //            let _webrtc = values[0].get::<gst::Element>().unwrap();
+        //            let mlineindex = values[1].get::<u32>().unwrap();
+        //            let candidate = values[2]
+        //                .get::<String>()
+        //                .unwrap();
 
-                    let conn = upgrade_weak!(conn_clone, None);
-                    if let Err(e) = conn.on_ice_candidate(mlineindex, candidate)
-                    {
-                        eprintln!("{:?}", e);
-                    }
-                    None
-                });
+        //            let conn = upgrade_weak!(conn_clone, None);
+        //            if let Err(e) = conn.on_ice_candidate(mlineindex, candidate)
+        //            {
+        //                eprintln!("{:?}", e);
+        //            }
+        //            None
+        //        });
 
-        let conn_clone = conn.downgrade();
+        //let conn_clone = conn.downgrade();
 
-        let _ = conn.webrtcbin.connect_pad_added(move |_webrtc, pad|
-            {
-                let conn = upgrade_weak!(conn_clone);
+        //let _ = conn.webrtcbin.connect_pad_added(move |_webrtc, pad|
+        //    {
+        //        let conn = upgrade_weak!(conn_clone);
 
-                if let Err(e) = conn.on_incoming_stream(pad)
-                {
-                    eprintln!("{:?}", e);
-                }
-            });
+        //        if let Err(e) = conn.on_incoming_stream(pad)
+        //        {
+        //            eprintln!("{:?}", e);
+        //        }
+        //    });
 
 
-        conn.pipeline.call_async(|pipeline| 
-            {
-                if pipeline.set_state(gst::State::Playing).is_err()
-                {
-                    eprintln!("Failure to set pipeline to playing");
-                }
+        //conn.pipeline.call_async(|pipeline| 
+        //    {
+        //        if pipeline.set_state(gst::State::Playing).is_err()
+        //        {
+        //            eprintln!("Failure to set pipeline to playing");
+        //        }
 
-            });
+        //    });
         Ok((conn, send_gst_msg_rx, UnboundedReceiverStream::new(send_ws_msg_rx)))
     }
 
@@ -216,6 +216,7 @@ impl UserConn
             .get::<WebRTCSessionDescription>()
             .unwrap();
 
+        println!("On offer created!");
         //println!(
         //    "sending SDP offer to peer: {}",
         //    offer.sdp().as_text().unwrap()
@@ -232,6 +233,14 @@ impl UserConn
 
             })
         .unwrap();
+        //As normal string, not json
+        //let message = serde_json::to_string(&JsonMsg::Sdp
+        //    {
+        //        type_:  "offer".to_string(),
+        //        sdp: offer.sdp().as_text()?,
+
+        //    })
+        //.unwrap();
 
         self.send_msg_tx.send(tungstenite::Message::text(message)).with_context(|| format!("Failed to send SDP offer"))?;
         Ok(())
@@ -322,6 +331,12 @@ impl UserConn
             }
         };
 
+
+        //let answer = reply
+        //    .unwrap()
+        //    .to_string();
+        //println!("answer: {:?}", reply);
+
         let answer = reply
             .unwrap()
             .value("answer")
@@ -354,7 +369,7 @@ impl UserConn
             bail!("Got error message: {}", msg);
         }
 
-        println!("{}", msg);
+        //println!("{}", msg);
         let json_msg: JsonMsg = serde_json::from_str(msg)?;
         println!("Parsed as Json");
 
@@ -421,9 +436,11 @@ impl UserConn
                 let app = upgrade_weak!(app_clone);
 
                 let offer = WebRTCSessionDescription::new(
-                    WebRTCSDPType::Offer,
+                    WebRTCSDPType::Answer,
                     ret,
                 );
+
+                println!("Offer: {:?}", offer.sdp().to_string());
 
                 app.0
                     .webrtcbin

@@ -1,5 +1,6 @@
 use futures::{SinkExt, StreamExt, channel::mpsc, stream::SplitSink};
 use leptos::{logging::{log, warn}, prelude::*, reactive::spawn_local, server_fn::{BoxedStream, Websocket, codec::JsonEncoding}};
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::JsValue;
 #[cfg(feature = "hydrate")]
@@ -93,17 +94,47 @@ async fn echo_websocket(input: BoxedStream<String, ServerFnError>)
     Ok(rx.into())
 
 }
+// JSON messages we communicate with
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", untagged)]
+enum JsonMsg {
+    Ice {
+        candidate: String,
+        #[serde(rename = "sdpMLineIndex")]
+        sdp_mline_index: u32,
+    },
+    Sdp {
+        sdp: String,
+        #[serde(rename = "type")]
+        type_: String,
+    },
+}
 #[cfg(feature = "hydrate")]
 async fn get_sdp() -> String
 {
+    use leptos::tachys::dom::document;
+
+
     let pc = web_sys::RtcPeerConnection::new().unwrap();
     let dc = pc.create_data_channel("channel");
+    
+    //pc.add_track();
+
     let offer =  JsFuture::from(pc.create_offer()).await.unwrap();
-    let sdp = Reflect::get(&offer, &JsValue::from_str("sdp"))
+    let sdp = js_sys::JSON::stringify(&offer)
         .unwrap()
         .as_string()
         .unwrap();
 
+    //let json_msg: JsonMsg = serde_json::from_str(sdp.as_str()).unwrap();
+
+    //let sdp = offer.as_string().unwrap();
+    //let sdp = Reflect::get(&offer, &JsValue::from_str("type"))
+    //    .unwrap()
+    //    .as_string()
+    //    .unwrap();
+
+    log!("{:?}", sdp);
     sdp
 
 }

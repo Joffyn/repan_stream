@@ -38,6 +38,9 @@ features = [
   "RtcIceCandidate",
   "RtcDataChannel",
   "RtcDataChannelEvent",
+  "MediaStream",
+  "MediaStreamTrack",
+  "RtcRtpSender"
 ]
 
 [features]
