@@ -1,16 +1,16 @@
 #[cfg(feature = "ssr")]
-use std::{path::Path};
-#[cfg(feature = "ssr")]
 use rusqlite::types::FromSql;
 #[cfg(feature = "ssr")]
-use rusqlite::{ Connection, Error, Result, ToSql};
+use rusqlite::{Connection, Error, Result, ToSql};
 #[cfg(feature = "ssr")]
 use std::fmt;
+#[cfg(feature = "ssr")]
+use std::path::Path;
 
 use leptos::logging::log;
 use serde::{Deserialize, Serialize};
 
-const DB_PATH: &str = "/home/joffy/repan_stream/";
+const DB_PATH: &str = "/home/joffy/Work/repan_stream/";
 //const DB_PATH: &str = "D:\\dev\\audio-stream\\";
 
 //#[derive(Serialize, Deserialize, Debug)]
@@ -22,23 +22,20 @@ const DB_PATH: &str = "/home/joffy/repan_stream/";
 //}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JamQueryResult<T>
-{
+pub struct JamQueryResult<T> {
     pub id: i64,
-    pub data: T, 
+    pub data: T,
 }
 
 #[derive(Debug)]
-pub enum QueryTarget
-{
+pub enum QueryTarget {
     Date,
     Path,
     Track(i64),
 }
 
 #[derive(Debug)]
-pub enum QueryAmount
-{
+pub enum QueryAmount {
     All,
     One(String),
     Month(String),
@@ -48,56 +45,51 @@ pub enum QueryAmount
 
 #[derive(Debug)]
 #[cfg(feature = "ssr")]
-pub enum DatabaseError
-{
-        AlreadyExists,
+pub enum DatabaseError {
+    AlreadyExists,
 }
 
 #[cfg(feature = "ssr")]
-impl fmt::Display for DatabaseError
-{
+impl fmt::Display for DatabaseError {
     #[cfg(feature = "ssr")]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result 
-    {
-        match self 
-        {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
             DatabaseError::AlreadyExists => write!(f, "Item already exists"),
         }
     }
 }
 
 #[cfg(feature = "ssr")]
-impl std::error::Error for DatabaseError{}
+impl std::error::Error for DatabaseError {}
 
 #[cfg(feature = "ssr")]
-impl From<rusqlite::Error> for DatabaseError
-{
+impl From<rusqlite::Error> for DatabaseError {
     #[cfg(feature = "ssr")]
-    fn from(_: rusqlite::Error) -> Self
-    {
+    fn from(_: rusqlite::Error) -> Self {
         todo!()
     }
 }
 
 #[cfg(feature = "ssr")]
-pub struct Database
-{
+pub struct Database {
     conn: Connection,
 }
 
 #[cfg(feature = "ssr")]
-impl Database
-{
-
+impl Database {
     #[cfg(feature = "ssr")]
-    fn new(conn: Connection) -> Self
-    {
+    fn new(conn: Connection) -> Self {
         Database { conn }
     }
 
     #[cfg(feature = "ssr")]
-    pub fn query<T>(&mut self, target: QueryTarget, amount: QueryAmount) -> Result<Vec<JamQueryResult<T>>, rusqlite::Error>
-    where T: FromSql
+    pub fn query<T>(
+        &mut self,
+        target: QueryTarget,
+        amount: QueryAmount,
+    ) -> Result<Vec<JamQueryResult<T>>, rusqlite::Error>
+    where
+        T: FromSql,
     {
         let (sql, params): (String, Vec<rusqlite::types::Value>) = match (target, amount)
         {
@@ -151,26 +143,22 @@ impl Database
 
         let mut stmt = self.conn.prepare(&sql)?;
         let params_refs: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
-        let rows = stmt.query_map
-            (&*params_refs, |row| 
-                { 
-                    Ok( JamQueryResult {
-                        data: row.get(0)?,
-                        id: row.get(1)?,
-                    })
-                })?;
+        let rows = stmt.query_map(&*params_refs, |row| {
+            Ok(JamQueryResult {
+                data: row.get(0)?,
+                id: row.get(1)?,
+            })
+        })?;
         let results: Result<Vec<_>, _> = rows.collect();
         results
     }
 }
 #[cfg(feature = "ssr")]
-pub fn get_database() -> Result<Database, Error>
-{
+pub fn get_database() -> Result<Database, Error> {
     let full_path = DB_PATH.to_string() + "jams.db";
     let db_path = Path::new(&full_path);
 
-    if !db_path.is_file()
-    {
+    if !db_path.is_file() {
         return Err(rusqlite::Error::InvalidPath(db_path.to_path_buf()));
     }
     let conn = Connection::open(&full_path)?;
