@@ -171,8 +171,6 @@ impl UserConn {
             let conn = upgrade_weak!(conn_clone);
             let promise = gst::Promise::with_change_func(move |reply| {
                 let answer = reply.unwrap().unwrap();
-                println!("Inside promise");
-
                 if let Ok(e) = answer.get::<glib::Error>("error") {
                     eprintln!("Answer: {e}");
                 } else {
@@ -182,6 +180,7 @@ impl UserConn {
                         .get::<WebRTCSessionDescription>()
                         .unwrap();
                     //println!("{:?}", thing.sdp().to_string());
+
                     tx.send(thing.sdp().to_string());
                 }
             });
@@ -189,6 +188,32 @@ impl UserConn {
 
             conn.webrtcbin
                 .emit_by_name::<()>("create-answer", &[&None::<gst::Structure>, &promise]);
+        });
+
+        match rx.await {
+            Ok(msg) => return Some(msg.to_string()),
+            Err(e) => return None,
+        }
+        None
+    }
+
+    pub async fn set_local_description(&self, local_desc: String) -> Option<String> {
+        let conn_clone = self.downgrade();
+        let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+
+        self.pipeline.call_async(move |_| {
+            let conn = upgrade_weak!(conn_clone);
+            let promise = gst::Promise::with_change_func(move |reply| {
+                tx.send("Set local description successfully".to_string());
+            });
+            let ret = gst_sdp::SDPMessage::parse_buffer(local_desc.as_bytes())
+                .map_err(|_| anyhow!("Failed to parse local description"))
+                .unwrap();
+
+            let answer = WebRTCSessionDescription::new(WebRTCSDPType::Answer, ret);
+
+            conn.webrtcbin
+                .emit_by_name::<()>("set-local-description", &[&answer, &promise]);
         });
 
         match rx.await {

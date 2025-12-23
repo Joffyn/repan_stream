@@ -17,6 +17,7 @@ tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 wasm-bindgen = { version = "= 0.2.100", optional = true }
 wasm-bindgen-futures = "0.4.50"
 regex = "1.11.1"
+uuid = { version = "1.19.0", features = ["v4", "js"] }
 serde = { version = "1.0.219", derived = true }
 serde_json = "1.0"
 rusqlite = { version = "0.37.0", features = ["bundled"], optional = true }
@@ -29,26 +30,22 @@ once_cell = "1.21.3"
 [dependencies.web-sys]
 version = "0.3"
 features = [
-  "MessageEvent",
-  "RtcPeerConnection",
-  "RtcSignalingState",
-  "RtcSdpType",
-  "RtcSessionDescriptionInit",
-  "RtcPeerConnectionIceEvent",
-  "RtcIceCandidate",
-  "RtcDataChannel",
-  "RtcDataChannelEvent",
-  "MediaStream",
-  "MediaStreamTrack",
-  "RtcRtpSender"
+    "MessageEvent",
+    "RtcPeerConnection",
+    "RtcSignalingState",
+    "RtcSdpType",
+    "RtcSessionDescriptionInit",
+    "RtcPeerConnectionIceEvent",
+    "RtcIceCandidate",
+    "RtcDataChannel",
+    "RtcDataChannelEvent",
+    "MediaStream",
+    "MediaStreamTrack",
+    "RtcRtpSender",
 ]
 
 [features]
-hydrate = [
-    "leptos/hydrate",
-    "dep:console_error_panic_hook",
-    "dep:wasm-bindgen",
-]
+hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
 ssr = [
     "dep:axum",
     "dep:tokio",

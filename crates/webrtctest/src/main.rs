@@ -1,31 +1,26 @@
 #![allow(dead_code)]
 #![allow(unused)]
 use anyhow::anyhow;
+use futures_util::{SinkExt, StreamExt, stream::SplitStream};
 use rand::Rng;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, accept_async};
-use futures_util::{SinkExt, StreamExt, stream::SplitStream};
 use tungstenite::Message;
 
 use crate::pipeline_handler::Connection;
 
 //use crate::{webrtc_conn::UserConn};
 
-
-
-
 mod user_connection;
 //mod webrtc_conn;
 mod pipeline_handler;
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error>
-{
+async fn main() -> Result<(), anyhow::Error> {
     gstreamer::init().unwrap();
-    
+
     let (mut ws, response) = tokio_tungstenite::connect_async("ws://127.0.0.1:3000/ws").await?;
     let mut conn = Connection::new(ws).await;
-    conn.streamer_to_website_handler().await;
-
+    conn.streamer_to_website_handler().await?;
 
     Ok(())
 }
@@ -41,8 +36,8 @@ async fn main() -> Result<(), anyhow::Error>
 //    let mut ws = tokio_tungstenite::connect_async("ws://127.0.0.1:3000/ws").await;
 //
 //    let bytes = vec![0;1];
-//    
-//    if let Ok((mut socket, response)) = ws 
+//
+//    if let Ok((mut socket, response)) = ws
 //    {
 //        println!("Connected");
 //        let id = rand::rng().random_range(10..1000);
@@ -61,7 +56,7 @@ async fn main() -> Result<(), anyhow::Error>
 //
 //        loop
 //        {
-//            let ws_msg = tokio::select! 
+//            let ws_msg = tokio::select!
 //            {
 //                ws_msg = ws_stream.select_next_some() =>
 //                {
@@ -86,7 +81,7 @@ async fn main() -> Result<(), anyhow::Error>
 //                    }
 //                    //match ws_msg?
 //                    //{
-//                    //    Message::Close(_) => 
+//                    //    Message::Close(_) =>
 //                    //    {
 //                    //        println!("peer disconnected");
 //                    //        break
@@ -94,7 +89,7 @@ async fn main() -> Result<(), anyhow::Error>
 //                    //    Message::Ping(data) => Some(Message::Pong(data)),
 //                    //    Message::Pong(_) => None,
 //                    //    Message::Binary(_) => None,
-//                    //    Message::Text(text) => 
+//                    //    Message::Text(text) =>
 //                    //    {
 //                    //        pipeline.handle_websocket_message(&text)?;
 //                    //        None
@@ -117,18 +112,15 @@ async fn main() -> Result<(), anyhow::Error>
 //            }
 //        }
 //    }
-//    else 
+//    else
 //    {
-//        eprintln!("No server to connect to!");  
+//        eprintln!("No server to connect to!");
 //    }
 //    Ok(())
 //}
-async fn test(mut ws_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>)
-{
-    loop
-    {
-        while let Some(Ok(msg)) = ws_stream.next().await
-        {
+async fn test(mut ws_stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>) {
+    loop {
+        while let Some(Ok(msg)) = ws_stream.next().await {
             println!("{}", msg.to_text().unwrap());
         }
     }
