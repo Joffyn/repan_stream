@@ -19,6 +19,10 @@ use wasm_bindgen_futures::JsFuture;
 #[cfg(feature = "hydrate")]
 use web_sys::js_sys::{self, JsString, Reflect};
 
+use crate::backend::client_connections::{
+    get_gst_sdp_answer, post_client_sdp_offer, ClientMessage,
+};
+
 const STUN_SERVER: &str = "stun://stun.l.google.com:19302";
 //pub static GSTREAMER_SENDER: Lazy<Arc<RwLock<Option<SplitSink<WebSocket, Message>>>>> = Lazy::new(||
 
@@ -30,114 +34,85 @@ pub static SERVER_TO_SOCKET_HANDLE_SENDER: Lazy<
 pub static SOCKET_HANDLE_TO_SERVER_RECEIVER: Lazy<
     Arc<RwLock<Option<tokio::sync::mpsc::Receiver<String>>>>,
 > = Lazy::new(|| Arc::new(RwLock::new(None)));
+#[component]
+pub fn OfferComp(user_id: ReadSignal<String>) -> impl IntoView {
+    let offer = LocalResource::new(move || get_sdp());
+    //let answer = OnceResource::new(get_gst_sdp_answer(user_id.get()));
+
+    view! {
+        <button on:click=move |_| {
+            spawn_local(async move {
+                log!("REEEE");
+                let offer = offer.await;
+                log!("{:?}", offer);
+                let _ = post_client_sdp_offer(user_id.get(), offer).await.unwrap();
+                let answer = get_gst_sdp_answer(user_id.get()).await;
+                log!("{:?}", answer);
+            });
+            }>
+           "CONNECT"
+        </button>
+    }
+}
 
 #[component]
-pub fn WebRtcComp() -> impl IntoView {
-    let (mut to_server_tx, from_client_rx) = mpsc::channel(1);
-    let user_id = Uuid::new_v4();
+pub fn WebRtcComp(user_id: ReadSignal<String>) -> impl IntoView {
+    let answer = OnceResource::new(get_gst_sdp_answer(user_id.get()));
+    let offer_res = LocalResource::new(move || get_sdp());
+    let sdp_action = Action::new(move |offer: &String| {
+        let id = user_id.get();
+        let offer = offer.clone();
 
-    //Websocket
-    if cfg!(feature = "hydrate") {
-        spawn_local(async move {
-            match echo_websocket(from_client_rx.into()).await {
-                Ok(mut messages) => {
-                    while let Some(Ok(msg)) = messages.next().await {
-                        log!("{:?}", serde_json::to_string(&msg));
-                    }
-                }
-                Err(e) => warn!("{e}"),
-                //_ => ()
-            }
-        });
-    }
-
-    let sdp_data = LocalResource::new(move || get_sdp());
-
-    //Send to server
+        async move {
+            let _ = post_client_sdp_offer(id.clone(), offer).await;
+            log!("First complete");
+            let answer = get_gst_sdp_answer(id.clone()).await;
+            log!("second complete: {:?}", answer.unwrap());
+        }
+    });
     view! {
-        <p>{move || sdp_data.get()}</p>
-            <button on:click=move |_|
-            {
-                let sdp = sdp_data.get().unwrap();
-                let sdp_json = serde_json::from_str::<GstJsonMsg>(sdp.as_str()).unwrap();
-                let msg = ClientMessage::Payload { id: user_id.as_u128().clone(), gst_msg: sdp_json};
-                log!("{:?}", serde_json::to_string(&msg).unwrap());
-                let _ = to_server_tx.clone().try_send(Ok(serde_json::to_string(&msg).unwrap()));
+        //<div>
+        //{
+        //    move || {
 
-            }>
-            "Test"
-            </button>
+        //        //spawn_local(async move {
+        //        //    let id = user_id.get().as_u128();
+        //        //    let _ = post_client_sdp_offer(id, offer.await).await;
+        //        //    log!("First complete");
+        //        //    let answer = get_gst_sdp_answer(id).await;
+        //        //    log!("second complete: {:?}", answer.unwrap());
+
+        //        //})
+        //    }
+        //}
+        //</div>
+
+    <Suspense fallback=move || {
+        view! {
+            <p>"Loading WebRTC..."</p>
+        }
+    }>
+    {
+        let offer = offer_res.get().unwrap();
+        move || Suspend::new(async move {
+
+                log!("NMEM");
+              //sdp_action.dispatch(offer);
+
+            //let sdp = answer.await.unwrap();
+            //log!("{}", sdp.as_str());
+            //view!{
+            //    <p>{sdp}</p>
+            //}
+        })
     }
-}
-#[server(protocol = Websocket<JsonEncoding, JsonEncoding>)]
-async fn echo_websocket(
-    from_client_rx: BoxedStream<String, ServerFnError>,
-) -> Result<BoxedStream<ClientMessage, ServerFnError>, ServerFnError> {
-    let mut input = from_client_rx;
-    let (mut to_client_tx, from_server_rx) = mpsc::channel(1);
+    </Suspense>
 
-    let to_gstreamer = SERVER_TO_SOCKET_HANDLE_SENDER.clone();
-
-    tokio::spawn(async move {
-        let _ = to_client_tx
-            .send(Ok(ClientMessage::Test {
-                test: "Meme".to_string(),
-            }))
-            .await;
-        //Incoming from client
-        while let Some(Ok(msg)) = input.next().await {
-            let gstreamer_sender = {
-                let guard = to_gstreamer.read().await;
-                guard.as_ref().cloned()
-            };
-
-            if let Some(s) = gstreamer_sender {
-                s.send(msg).await;
-            } else {
-                log!("No backend streamer connected!");
-            }
-        }
-    });
-    let from_gst = SOCKET_HANDLE_TO_SERVER_RECEIVER.clone();
-    tokio::spawn(async move {
-        let mut guard = from_gst.write().await;
-        let guard = guard.as_mut().unwrap();
-        //let _ = guard
-        //   .send(msg.to_text().unwrap().to_string())
-        //   .await
-        //   .unwrap();
-        while let Some(msg) = guard.recv().await {
-            log!("Received from gst: {:?}", msg);
-        }
-    });
-
-    Ok(from_server_rx.into())
-}
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase", untagged)]
-pub enum ClientMessage {
-    Payload { gst_msg: GstJsonMsg, id: u128 },
-    Test { test: String },
-}
-
-// JSON messages we communicate with
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase", untagged)]
-enum GstJsonMsg {
-    Ice {
-        candidate: String,
-        #[serde(rename = "sdpMLineIndex")]
-        sdp_mline_index: u32,
-    },
-    Sdp {
-        sdp: String,
-        #[serde(rename = "type")]
-        type_: String,
-    },
+    }
 }
 #[cfg(feature = "hydrate")]
 async fn get_sdp() -> String {
-    use leptos::tachys::dom::document;
+    //use leptos::tachys::dom::document;
 
     let pc = web_sys::RtcPeerConnection::new().unwrap();
     let dc = pc.create_data_channel("channel");
@@ -150,12 +125,10 @@ async fn get_sdp() -> String {
         .as_string()
         .unwrap();
 
-    //let sdp = offer.as_string().unwrap();
-
     log!("{:?}", sdp);
     sdp
 }
 #[cfg(not(feature = "hydrate"))]
 async fn get_sdp() -> String {
-    "MEME".to_string()
+    "Null".to_string()
 }

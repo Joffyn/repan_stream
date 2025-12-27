@@ -1,13 +1,17 @@
-use leptos::{logging::log, mount, prelude::*,  task::spawn_local};
+use leptos::{logging::log, mount, prelude::*, task::spawn_local};
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
     StaticSegment,
 };
+use uuid::Uuid;
 
-use crate::frontend::{calendar::Calendar, jamselector::JamSelector, track_list::TrackList, webrtc::WebRtcComp};
-
-
+use crate::frontend::{
+    calendar::Calendar,
+    jamselector::JamSelector,
+    track_list::TrackList,
+    webrtc::{OfferComp, WebRtcComp},
+};
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -51,17 +55,17 @@ pub fn App() -> impl IntoView {
     }
 }
 
-
 /// Renders the home page of your application.
 #[component]
 fn HomePage() -> impl IntoView {
-
     let (started, set_started) = signal(false);
 
     let (selected_day, set_selected_day) = signal(String::new());
     let (selected_jam_id, set_selected_jam_id) = signal(0 as i64);
-
-
+    //let uuid = Uuid::new_v4();
+    let uuid = Uuid::new_v4();
+    let uuid = uuid.as_u128().to_string();
+    let (user_id, _) = signal(uuid);
 
     provide_context(set_selected_day);
 
@@ -78,18 +82,23 @@ fn HomePage() -> impl IntoView {
             set_selected_jam_id=set_selected_jam_id
         ></JamSelector>
         <TrackList selected_jam_id=selected_jam_id />
-        <Show when=move || { !started.get() } fallback=|| view! { <p>"Connect"</p> }>
-            <button on:click=move |_| {
-                spawn_local(async {
-                    //start_connecting().await;
-                });
-                *set_started.write() = true;
-            }>"Start Connecting"</button>
-        </Show>
-        <button on:click=move |_| {
-            spawn_local(async {});
-        }>"Play pipeline"</button>
-        <WebRtcComp></WebRtcComp>
-    }
+        //<Show when=move || { !started.get() } fallback=|| view! { <p>"Connect"</p> }>
+        //    <button on:click=move |_| {
+        //        spawn_local(async {
+        //            //start_connecting().await;
+        //        });
+        //        *set_started.write() = true;
+        //    }>"Start Connecting"</button>
+        //</Show>
+        //<button on:click=move |_| {
+        //    spawn_local(async {});
+        //}>"Play pipeline"</button>
+        <div>
+                <OfferComp user_id=user_id></OfferComp>
+            //<WebRtcComp user_id=user_id></WebRtcComp>
+        </div>
 
+
+
+    }
 }

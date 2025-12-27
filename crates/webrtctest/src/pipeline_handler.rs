@@ -18,7 +18,7 @@ use crate::user_connection::UserConn;
 #[derive(Debug, Serialize, Deserialize)]
 struct ClientMessage {
     gst_msg: GstJsonMsg,
-    id: u128,
+    id: String,
 }
 
 // JSON messages we communicate with
@@ -61,7 +61,7 @@ pub struct Connection {
     //stream: Fuse<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>
     stream: RepanStream,
     sink: RepanSink,
-    clients: Arc<Mutex<HashMap<u128, UserConn>>>,
+    clients: Arc<Mutex<HashMap<String, UserConn>>>,
 }
 
 impl Connection {
@@ -125,14 +125,14 @@ impl Connection {
                         sdp: sdp_answer,
                         r#type: "answer".to_string(),
                     },
-                    id: client_msg.id,
+                    id: client_msg.id.clone(),
                 };
                 let answer = serde_json::to_string(&answer).unwrap();
                 self.sink.send(Message::Text(Utf8Bytes::from(answer))).await;
 
                 let clients = self.clients.clone();
                 let mut guard = clients.lock().await;
-                guard.insert(client_msg.id, user_conn);
+                guard.insert(client_msg.id.clone(), user_conn);
 
                 //std::thread::sleep(Duration::new(3, 0))
 
