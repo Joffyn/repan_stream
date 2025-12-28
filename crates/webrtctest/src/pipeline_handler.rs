@@ -25,11 +25,11 @@ struct ClientMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 enum GstJsonMsg {
-    //Ice {
-    //    candidate: String,
-    //    #[serde(rename = "sdpMLineIndex")]
-    //    sdp_mline_index: u32,
-    //},
+    Ice {
+        candidate: String,
+        #[serde(rename = "sdpMLineIndex")]
+        sdp_mline_index: u32,
+    },
     Sdp {
         sdp: String,
         #[serde(rename = "type")]
@@ -143,10 +143,19 @@ impl Connection {
                 //let _ = self.sink.send(Message::Text(Utf8Bytes::from(sdp_answer))).await?;
 
                 Ok(())
-            } //GstJsonMsg::Ice {
-              //    sdp_mline_index,
-              //    candidate,
-              //} => Ok(()),
+            }
+            GstJsonMsg::Ice {
+                candidate,
+                sdp_mline_index,
+            } => {
+                let clients = self.clients.clone();
+                let mut guard = clients.lock().await;
+                if let Some(conn) = guard.get(&client_msg.id.clone()) {
+                    conn.add_ice_candidate(sdp_mline_index, candidate).await;
+                }
+
+                Ok(())
+            }
         }
     }
     async fn handle_user_messages(&self, user_conn: UserConn) {}

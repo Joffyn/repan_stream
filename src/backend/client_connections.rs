@@ -33,17 +33,22 @@ pub static CLIENT_SDP_ANSWERS: Lazy<Arc<Mutex<HashMap<String, String>>>> =
 pub static GST_MSG_SINK: Lazy<Arc<Mutex<Option<SplitSink<WebSocket, Message>>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase", untagged)]
-pub enum ClientMessage {
-    Payload { gst_msg: GstJsonMsg, id: String },
-    Test { test: String },
+//#[derive(Serialize, Deserialize)]
+//#[serde(rename_all = "lowercase", untagged)]
+//pub enum ClientMessage {
+//    Payload { gst_msg: GstJsonMsg, id: String },
+//    Test { test: String },
+//}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClientMessage {
+    pub gst_msg: GstJsonMsg,
+    id: String,
 }
 
 // JSON messages we communicate with
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", untagged)]
-enum GstJsonMsg {
+pub enum GstJsonMsg {
     Ice {
         candidate: String,
         #[serde(rename = "sdpMLineIndex")]
@@ -52,7 +57,7 @@ enum GstJsonMsg {
     Sdp {
         sdp: String,
         #[serde(rename = "type")]
-        type_: String,
+        r#type: String,
     },
 }
 
@@ -75,7 +80,7 @@ pub async fn get_gst_sdp_answer(id: String) -> Result<String, ServerFnError> {
 pub async fn post_client_sdp_offer(id: String, offer: String) -> Result<(), ServerFnError> {
     log!("Sent from server");
     let sdp_json = serde_json::from_str::<GstJsonMsg>(offer.as_str()).unwrap();
-    let msg = ClientMessage::Payload {
+    let msg = ClientMessage {
         id,
         gst_msg: sdp_json,
     };
@@ -91,6 +96,31 @@ pub async fn post_client_sdp_offer(id: String, offer: String) -> Result<(), Serv
 
     Ok(())
 }
+#[server(PostICECandidateToServer)]
+pub async fn post_ice_candidate_to_server(
+    id: String,
+    candidate: String,
+    mline: u32,
+) -> Result<(), ServerFnError> {
+    log!("Attempting to send ice from server");
+    let ice = GstJsonMsg::Ice {
+        candidate,
+        sdp_mline_index: mline,
+    };
+    let msg = ClientMessage { gst_msg: ice, id };
+    let msg = serde_json::to_string(&msg).unwrap();
+
+    let msg = Message::Text(Utf8Bytes::from(msg));
+    let gst_sink = GST_MSG_SINK.clone();
+    let mut guard = gst_sink.lock().await;
+    let guard = guard.as_mut().unwrap();
+
+    let _ = guard.send(msg).await;
+    drop(guard);
+
+    log!("Sent Ice candidate from client");
+    Ok(())
+}
 
 #[cfg(feature = "ssr")]
 pub async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
@@ -104,63 +134,38 @@ async fn handle_socket(mut socket: WebSocket) {
 
     socket.send(Message::Text(Utf8Bytes::from_static("Hello!")));
     log!("Socket being handled");
-    //let (mut client_tx, mut client_rx) = tokio::sync::mpsc::channel::<String>(128);
-    //let (mut gst_server_client_sender, gst_server_client_sink) =
-    //    tokio::sync::mpsc::channel::<String>(128);
-
-    //let streamer_to_server = SOCKET_HANDLE_TO_SERVER_RECEIVER.clone();
-    //*streamer_to_server.write().await = Some(gst_server_client_sink);
-
     let (mut gst_sink, mut gst_receiver) = socket.split();
     let client_messager = GST_MSG_SINK.clone();
     *client_messager.lock().await = Some(gst_sink);
 
     tokio::spawn(handle_streamer_messages(gst_receiver));
-
-    //tokio::spawn(handle_client_messages(streamer_sender, client_rx));
-    //tokio::spawn(handle_streamer_messages(
-    //    gst_server_client_sender,
-    //    streamer_receiver,
-    //));
-    //log!("Socket disconnecting");
 }
-//async fn handle_client_messages(mut tx: SplitSink<WebSocket, Message>, mut rx: Receiver<String>) {
-//    use axum::extract::ws::Utf8Bytes;
-//    loop {
-//        match rx.recv().await {
-//            Some(msg) => {
-//                //let json = serde_json::to_string(&msg).unwrap();
-//                //log!("Sent: {} from server!", msg.as_str());
-//                let _ = tx.send(Message::Text(Utf8Bytes::from(msg.as_str()))).await;
-//            }
-//            _ => (),
-//        }
-//    }
-//}
 #[cfg(feature = "ssr")]
 async fn handle_streamer_messages(mut rx: SplitStream<WebSocket>) {
     loop {
         match rx.next().await {
             Some(Ok(msg)) => {
-                //let gstreamer_receiver = SERVER_TO_SOCKET_HANDLE_SENDER.clone();
-                //let guard = gstreamer_receiver.read().await;
-                //let guard = guard.as_ref().unwrap();
-                //let _ = guard
-                //    .send(msg.to_text().unwrap().to_string())
-                //    .await
-                //    .unwrap();
-
                 log!("From Gstreamer: {:?}", msg.to_text().unwrap());
-                let client_connections = CLIENT_SDP_ANSWERS.clone();
-                let mut guard = client_connections.lock().await;
-                let _ = guard.insert("1".to_string(), msg.to_text().unwrap().to_string());
+                let text = msg.to_text().unwrap();
+                let json: Result<ClientMessage, serde_json::Error> = serde_json::from_str(text);
 
-                //let _ = tx.send(msg.to_text().unwrap().to_string()).await.unwrap();
-                //log!("From Gstreamer: {:?}", msg.to_text().unwrap());
+                match json {
+                    Ok(msg) => match msg.gst_msg {
+                        GstJsonMsg::Sdp { r#type, sdp } => {
+                            if r#type.ne("answer") {
+                                log!("Got sdp, but it was offer");
+                                continue;
+                            }
 
-                //drop(guard);
+                            let client_connections = CLIENT_SDP_ANSWERS.clone();
+                            let mut guard = client_connections.lock().await;
+                            let _ = guard.insert(msg.id.clone(), sdp);
+                        }
+                        _ => (),
+                    },
+                    _ => log!("Not json message"),
+                }
             }
-            //log!("{:?}", msg.to_text().unwrap()),
             Some(Err(e)) => log!("{:?}", e.to_string()),
             None => {
                 log!("Socket ended");

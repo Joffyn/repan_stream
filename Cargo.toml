@@ -51,6 +51,7 @@ ssr = [
     "dep:tokio",
     "dep:leptos_axum",
     "dep:rusqlite",
+    "dep:wasm-bindgen",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",

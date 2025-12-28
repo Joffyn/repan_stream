@@ -7,10 +7,7 @@ use leptos_router::{
 use uuid::Uuid;
 
 use crate::frontend::{
-    calendar::Calendar,
-    jamselector::JamSelector,
-    track_list::TrackList,
-    webrtc::{OfferComp, WebRtcComp},
+    calendar::Calendar, jamselector::JamSelector, track_list::TrackList, webrtc::OfferComp,
 };
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {

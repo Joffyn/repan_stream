@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 gstreamer = "0.24.4"
-gstreamer-webrtc = "0.24.4"
+gstreamer-webrtc = { version = "0.24.4", features = ["v1_24"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.145", features = ["arbitrary_precision"] }
 axum = "0.8.0"

@@ -9,7 +9,9 @@ use gstreamer::{
     bus::BusStream,
     glib::{self, GString},
 };
-use gstreamer_webrtc::{WebRTCSDPType, WebRTCSessionDescription, gst::Message, gst_sdp};
+use gstreamer_webrtc::{
+    WebRTCSDPType, WebRTCSessionDescription, ffi::GstWebRTCDataChannel, gst::Message, gst_sdp,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{
     Mutex, futures,
@@ -94,7 +96,6 @@ impl UserConn {
             .unwrap();
 
         let webrtcbin = pipeline.by_name("webrtcbin").unwrap();
-        println!("Test");
 
         webrtcbin.set_property_from_str("stun-server", STUN_SERVER);
         webrtcbin.set_property_from_str("bundle-policy", "max-bundle");
@@ -131,6 +132,29 @@ impl UserConn {
             pipeline_stream: Arc::new(Mutex::new(pipeline_stream)),
         }));
         println!("User connection created");
+
+        let conn_clone = conn.downgrade();
+        conn.webrtcbin.connect("on-data-channel", false, |values| {
+            for v in values {
+                let t = v.type_();
+                println!("Type of value in datachannel msg: {:?}", t);
+            }
+            let obj = values[1].get::<glib::Object>().unwrap();
+            let dc = obj
+                .downcast::<gstreamer_webrtc::WebRTCDataChannel>()
+                .unwrap();
+
+            dc.connect_on_message_string(move |_, msg| {
+                println!("{}", msg.unwrap());
+            });
+
+            //let client_msg = values[0].get::<String>().unwrap();
+            //println!("{}", client_msg.as_str());
+            let num = values.len();
+            println!("Number of messages on-data-channel: {:?}", num);
+            None
+        });
+
         Ok(conn)
     }
 
@@ -221,6 +245,11 @@ impl UserConn {
             Err(e) => return None,
         }
         None
+    }
+    pub async fn add_ice_candidate(&self, mlineindex: u32, candidate: String) {
+        println!("Added ice candidate");
+        self.webrtcbin
+            .emit_by_name::<()>("add-ice-candidate", &[&mlineindex, &candidate]);
     }
 
     //pub fn deliver_sdp(&self, sdp_offer: &str) -> Result<(), anyhow::Error> {
