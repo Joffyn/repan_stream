@@ -105,7 +105,7 @@ impl Connection {
         }
     }
     async fn parse_websocket_msg(&mut self, msg: String) -> Result<(), anyhow::Error> {
-        println!("{}", msg.as_str());
+        //println!("{}", msg.as_str());
         let client_msg: ClientMessage = serde_json::from_str(msg.as_str())?;
         //println!("Was able to parse json");
 
@@ -119,7 +119,7 @@ impl Connection {
                     .set_local_description(sdp_answer.clone())
                     .await
                     .unwrap();
-                println!("{:?}", set_desc);
+                //println!("{:?}", set_desc);
                 let answer = ClientMessage {
                     gst_msg: GstJsonMsg::Sdp {
                         sdp: sdp_answer,
@@ -130,6 +130,7 @@ impl Connection {
                 let answer = serde_json::to_string(&answer).unwrap();
                 self.sink.send(Message::Text(Utf8Bytes::from(answer))).await;
 
+                println!("Locked before user has been created");
                 let clients = self.clients.clone();
                 let mut guard = clients.lock().await;
                 guard.insert(client_msg.id.clone(), user_conn);
@@ -148,6 +149,7 @@ impl Connection {
                 candidate,
                 sdp_mline_index,
             } => {
+                println!("Locked because of incoming ice");
                 let clients = self.clients.clone();
                 let mut guard = clients.lock().await;
                 if let Some(conn) = guard.get(&client_msg.id.clone()) {

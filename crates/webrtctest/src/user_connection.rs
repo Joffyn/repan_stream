@@ -90,7 +90,7 @@ impl UserConn {
 
     pub fn new() -> Result<Self, anyhow::Error> {
         let pipeline = gst::parse::launch(
-            "audiotestsrc is-live=true ! opusenc ! rtpopuspay pt=97 ! webrtcbin. webrtcbin name=webrtcbin")
+            "audiotestsrc is-live=true ! opusenc ! rtpopuspay pt=111 ! webrtcbin. webrtcbin name=webrtcbin")
             .unwrap()
             .downcast::<gst::Pipeline>()
             .unwrap();
@@ -136,7 +136,7 @@ impl UserConn {
         let conn_clone = conn.downgrade();
         conn.webrtcbin.connect("on-data-channel", false, |values| {
             for v in values {
-                let t = v.type_();
+                let t = v.value_type();
                 println!("Type of value in datachannel msg: {:?}", t);
             }
             let obj = values[1].get::<glib::Object>().unwrap();
@@ -147,13 +147,89 @@ impl UserConn {
             dc.connect_on_message_string(move |_, msg| {
                 println!("{}", msg.unwrap());
             });
+            //let meme: GstWebRTCBin = GstWebRTCBin;
 
             //let client_msg = values[0].get::<String>().unwrap();
             //println!("{}", client_msg.as_str());
             let num = values.len();
             println!("Number of messages on-data-channel: {:?}", num);
+            //let conn = upgrade_weak!(conn_clone);
+
             None
         });
+        conn.webrtcbin
+            .connect("on-new-transceiver", false, |values| {
+                for v in values {
+                    let t = v.type_();
+                    println!("Type of value in new transeiver msg: {:?}", t);
+                }
+                let num = values.len();
+                println!("Number of messages on-new-transceiver: {:?}", num);
+
+                //let obj = values[1].get::<glib::Object>().unwrap();
+                //let tr = obj
+                //    .downcast::<gstreamer_webrtc::WebRTCRTPTransceiver>()
+                //    .unwrap();
+                //println!("Got transceiver");
+                //let sender = tr.sender().unwrap();
+                //println!("Unwrapped sender");
+                None
+            });
+
+        conn.webrtcbin
+            .connect("prepare-data-channel", false, |values| {
+                for v in values {
+                    let t = v.type_();
+                    println!("Type of value in prepare-data-channel msg: {:?}", t);
+                }
+                let num = values.len();
+                println!("Number of messages prepare-data-channel: {:?}", num);
+
+                //let obj = values[1].get::<glib::Object>().unwrap();
+                //let tr = obj
+                //    .downcast::<gstreamer_webrtc::WebRTCRTPTransceiver>()
+                //    .unwrap();
+                //println!("Got transceiver");
+                //let sender = tr.sender().unwrap();
+                //println!("Unwrapped sender");
+                None
+            });
+
+        conn.webrtcbin.connect("on-ice-candidate", false, |values| {
+            for v in values {
+                let t = v.type_();
+                println!("Type of value in on-ice-candidate: {:?}", t);
+            }
+            let num = values.len();
+            println!("Number of messages on-ice-candidate: {:?}", num);
+
+            //let obj = values[1].get::<glib::Object>().unwrap();
+            //let tr = obj
+            //    .downcast::<gstreamer_webrtc::WebRTCRTPTransceiver>()
+            //    .unwrap();
+            //println!("Got transceiver");
+            //let sender = tr.sender().unwrap();
+            //println!("Unwrapped sender");
+            None
+        });
+        //conn.webrtcbin
+        //    .connect("on-negotiation-needed", false, |values| {
+        //        for v in values {
+        //            let t = v.type_();
+        //            println!("Type of value in on-negotiation-needed: {:?}", t);
+        //        }
+        //        let num = values.len();
+        //        println!("Number of messages on-negotiation-needed: {:?}", num);
+
+        //        //let obj = values[1].get::<glib::Object>().unwrap();
+        //        //let tr = obj
+        //        //    .downcast::<gstreamer_webrtc::WebRTCRTPTransceiver>()
+        //        //    .unwrap();
+        //        //println!("Got transceiver");
+        //        //let sender = tr.sender().unwrap();
+        //        //println!("Unwrapped sender");
+        //        None
+        //    });
 
         Ok(conn)
     }
