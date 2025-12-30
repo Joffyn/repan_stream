@@ -11,7 +11,10 @@ use leptos::{
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use std::{rc::Rc, sync::Arc};
+use std::{
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 #[cfg(feature = "ssr")]
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -28,39 +31,11 @@ use web_sys::{RtcPeerConnection, RtcTrackEvent};
 use crate::backend::client_connections::{
     get_gst_sdp_answer, post_client_sdp_offer, post_ice_candidate_to_server, ClientMessage,
 };
-//#[cfg(feature = "hydrate")]
-//pub static USER_CONNECTION: Lazy<Option<WebRtcConnection>> = Lazy::new(|| None);
 
 const STUN_SERVER: &str = "stun://stun.l.google.com:19302";
-
-//#[cfg(not(feature = "hydrate"))]
-//struct WebRtcConnection {}
-
-//#[cfg(feature = "hydrate")]
-//struct WebRtcConnection {
-//    pc: Arc<RtcPeerConnection>,
-//    dc: Arc<RtcDataChannel>,
-//}
-//impl WebRtcConnection {
-//    #[cfg(feature = "hydrate")]
-//    fn new() -> Self {
-//        //use leptos::tachys::dom::document;
-//
-//        let pc = Arc::new(web_sys::RtcPeerConnection::new().unwrap());
-//        let dc = Arc::new(pc.create_data_channel("channel"));
-//
-//        //pc.add_track();
-//
-//        WebRtcConnection { pc, dc }
-//    }
-//    //#[cfg(not(feature = "hydrate"))]
-//    //fn new() -> Self {
-//    //    WebRtcConnection {}
-//    //}
-//}
-
 #[component]
 pub fn OfferComp(user_id: ReadSignal<String>) -> impl IntoView {
+    //let (p, s_p) = signal_local::<Option<RtcPeerConnection>>(None);
     let mut pc: Option<Rc<RtcPeerConnection>> = None;
     let mut dc: Option<Rc<RtcDataChannel>> = None;
     let mut tr: Option<Rc<RtcRtpTransceiver>> = None;
@@ -107,8 +82,6 @@ pub fn OfferComp(user_id: ReadSignal<String>) -> impl IntoView {
                     });
                     pc_clone.set_ontrack(Some(track_callback.as_ref().unchecked_ref()));
                     track_callback.forget();
-
-
 
                     use crate::backend::client_connections::GstJsonMsg;
                     let dc_callback = Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
@@ -176,82 +149,9 @@ pub fn OfferComp(user_id: ReadSignal<String>) -> impl IntoView {
                         let _ = JsFuture::from(remote_promise).await.unwrap();
                     }
                 });
-
             }
             }>
            "CONNECT"
         </button>
     }
 }
-#[cfg(feature = "hydrate")]
-async fn test(user_id: String, pc: Arc<RtcPeerConnection>, dc: Arc<RtcDataChannel>) {
-    use wasm_bindgen::{prelude::Closure, JsCast};
-
-    use crate::backend::client_connections::GstJsonMsg;
-
-    let dc_clone = dc.clone();
-    let func = Closure::<dyn FnMut()>::new(move || {
-        log!("Sent from client");
-        dc_clone.send_with_str("Message from datachannel!").unwrap();
-    });
-    dc.clone().set_onopen(Some(func.as_ref().unchecked_ref()));
-    func.forget();
-
-    let offer = JsFuture::from(pc.create_offer()).await.unwrap();
-    let sdp_offer = js_sys::JSON::stringify(&offer)
-        .unwrap()
-        .as_string()
-        .unwrap();
-
-    let json: GstJsonMsg = serde_json::from_str(sdp_offer.as_str()).unwrap();
-
-    if let GstJsonMsg::Sdp { sdp, r#type } = json {
-        log!("Parsed sdp in client to local desc");
-        let local = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
-        local.set_sdp(sdp.as_str());
-        let local_promise = pc.set_local_description(&local);
-        let _ = JsFuture::from(local_promise).await.unwrap();
-        log!("Attempting to post client sdp");
-
-        let _ = post_client_sdp_offer(user_id.clone(), sdp_offer)
-            .await
-            .unwrap();
-        log!("Posted client sdp");
-        let answer = get_gst_sdp_answer(user_id).await.unwrap();
-        log!("Got sdp from gstreamer");
-        let remote = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
-        remote.set_sdp(answer.as_str());
-        log!("Created remote description");
-        let remote_promise = pc.set_remote_description(&remote);
-        let _ = JsFuture::from(remote_promise).await.unwrap();
-    }
-    log!("Left webrtc function");
-    //let _ = dc.send_with_str("Message from datachannel!").unwrap();
-}
-
-//#[cfg(not(feature = "hydrate"))]
-//struct RtcPeerConnection {}
-//#[cfg(not(feature = "hydrate"))]
-//struct RtcDataChannel {}
-//#[cfg(not(feature = "hydrate"))]
-//async fn test(_: String, pc: Arc<RtcPeerConnection>, dc: Arc<RtcDataChannel>) {}
-
-//#[cfg(feature = "hydrate")]
-//async fn get_sdp() -> Result<WebRtcConnection, anyhow::Error> {
-//    //use leptos::tachys::dom::document;
-//
-//    let pc = web_sys::RtcPeerConnection::new().unwrap();
-//    let dc = pc.create_data_channel("channel");
-//
-//    //pc.add_track();
-//
-//    let offer = JsFuture::from(pc.create_offer()).await.unwrap();
-//    let sdp = js_sys::JSON::stringify(&offer)
-//        .unwrap()
-//        .as_string()
-//        .unwrap();
-//}
-//#[cfg(not(feature = "hydrate"))]
-//async fn get_sdp() -> String {
-//    "Null".to_string()
-//}

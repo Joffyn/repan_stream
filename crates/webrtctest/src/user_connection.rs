@@ -90,10 +90,11 @@ impl UserConn {
 
     pub fn new() -> Result<Self, anyhow::Error> {
         let pipeline = gst::parse::launch(
-            "audiotestsrc is-live=true ! opusenc ! rtpopuspay pt=111 ! webrtcbin. webrtcbin name=webrtcbin")
-            .unwrap()
-            .downcast::<gst::Pipeline>()
-            .unwrap();
+            "audiomixer name=mix ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! opusenc ! rtpopuspay pt=111 ! webrtcbin. webrtcbin name=webrtcbin",
+        )
+        .unwrap()
+        .downcast::<gst::Pipeline>()
+        .unwrap();
 
         let webrtcbin = pipeline.by_name("webrtcbin").unwrap();
 
@@ -111,20 +112,6 @@ impl UserConn {
             println!("Pipeline started!");
         });
 
-        //let promise = gst::Promise::with_change_func(move |reply|
-        //{
-        //    //let conn = upgrade_weak!(conn_clone);
-        //    let answer = reply
-        //        .unwrap()
-        //        .unwrap();
-        //
-        //    if let Ok(e) = answer.get::<glib::Error>("error")
-        //    {
-        //        eprintln!("Answer: {e}");
-        //    }
-        //});
-        //webrtcbin.emit_by_name::<()>("create-answer", &[&None::<gst::Structure>, &promise]);
-
         let conn = UserConn(Arc::new(UserConnectionInner {
             pipeline,
             webrtcbin,
@@ -132,31 +119,33 @@ impl UserConn {
             pipeline_stream: Arc::new(Mutex::new(pipeline_stream)),
         }));
         println!("User connection created");
+        let (tx, rx) = mpsc::channel::<String>(128);
 
         let conn_clone = conn.downgrade();
-        conn.webrtcbin.connect("on-data-channel", false, |values| {
-            for v in values {
-                let t = v.value_type();
-                println!("Type of value in datachannel msg: {:?}", t);
-            }
-            let obj = values[1].get::<glib::Object>().unwrap();
-            let dc = obj
-                .downcast::<gstreamer_webrtc::WebRTCDataChannel>()
-                .unwrap();
+        conn.webrtcbin
+            .connect("on-data-channel", false, move |values| {
+                let conn = upgrade_weak!(conn_clone, None);
+                for v in values {
+                    let t = v.value_type();
+                    println!("Type of value in datachannel msg: {:?}", t);
+                }
+                let obj = values[1].get::<glib::Object>().unwrap();
+                let dc = obj
+                    .downcast::<gstreamer_webrtc::WebRTCDataChannel>()
+                    .unwrap();
 
-            dc.connect_on_message_string(move |_, msg| {
-                println!("{}", msg.unwrap());
+                //let sender = tx.clone();
+                dc.connect_on_message_string(move |_, msg| {
+                    if let Some(msg) = msg {
+                        conn.parse_data_channel_msg(msg.to_string());
+                    } else {
+                        println!("Message incoming from datachannel was None");
+                    }
+                });
+                let num = values.len();
+                println!("Number of messages on-data-channel: {:?}", num);
+                None
             });
-            //let meme: GstWebRTCBin = GstWebRTCBin;
-
-            //let client_msg = values[0].get::<String>().unwrap();
-            //println!("{}", client_msg.as_str());
-            let num = values.len();
-            println!("Number of messages on-data-channel: {:?}", num);
-            //let conn = upgrade_weak!(conn_clone);
-
-            None
-        });
         conn.webrtcbin
             .connect("on-new-transceiver", false, |values| {
                 for v in values {
@@ -327,45 +316,33 @@ impl UserConn {
         self.webrtcbin
             .emit_by_name::<()>("add-ice-candidate", &[&mlineindex, &candidate]);
     }
+    fn change_audio_src(&self, tracks: &[String]) -> Result<(), anyhow::Error> {
+        for (index, track) in tracks.iter().enumerate() {
+            let desc = format!(
+                r#"filesrc location={track} !
+                                wavparse !
+                                audioconvert !
+                                audioresample ! 
+                                audio/x-raw,rate=48000,channels=2 !
+                                audiopanorama name=pan{index} !
+                                volume name=vol{index} !
+                                queue name=q"#
+            );
 
-    //pub fn deliver_sdp(&self, sdp_offer: &str) -> Result<(), anyhow::Error> {
-    //    let ret = gst_sdp::SDPMessage::parse_buffer(sdp_offer.as_bytes())
-    //        .map_err(|_| anyhow!("Failed to parse SDP offer"))?;
-    //    let clone = self.downgrade();
-    //    self.pipeline.call_async(move |_| {
-    //        let real = upgrade_weak!(clone);
-
-    //        let offer = WebRTCSessionDescription::new(WebRTCSDPType::Offer, ret);
-
-    //        println!("Remote description set");
-    //        real.0
-    //            .webrtcbin
-    //            .emit_by_name::<()>("set-remote-description", &[&offer, &None::<gst::Promise>]);
-    //    });
-    //    println!("SDP offer delivered");
-    //    Ok(())
-    //}
-    //pub async fn get_sdp_answer(&self) -> Result<String, anyhow::Error> {
-    //    //self.webrtcbin.emit_by_name::<()>("create-answer", &[&None::<gst::Structure>, &None::<gst::Promise>]);
-
-    //    //let offer: WebRTCSessionDescription = reply
-    //    //    .unwrap()
-    //    //    .value("offer")
-    //    //    .unwrap()
-    //    //    .get::<WebRTCSessionDescription>()
-    //    //    .unwrap();
-
-    //    //println!("On offer created!");
-    //    //self.webrtcbin
-    //    //    .emit_by_name::<()>("set-local-description", &[&offer, &None::<gst::Promise>]);
-
-    //    //let message = serde_json::to_string(&JsonMsg::Sdp
-    //    //    {
-    //    //        type_:  "offer".to_string(),
-    //    //        sdp: offer.sdp().as_text()?,
-
-    //    //    })
-    //    //.unwrap();
-    //    Ok("meme".to_string())
-    //}
+            let mixer = self.pipeline.by_name("mix").unwrap();
+            let mix_pad = mixer.request_pad_simple("sink_%u").unwrap();
+            let bin = gst::parse::bin_from_description(desc.as_str(), true).unwrap();
+            self.pipeline.add(&bin);
+            let src = bin.static_pad("src").unwrap();
+            src.link(&mix_pad).unwrap();
+            bin.sync_state_with_parent().unwrap();
+        }
+        Ok(())
+    }
+    fn parse_data_channel_msg(&self, unparsed_msg: String) {
+        self.change_audio_src(&[
+            "/home/joffy/Work/repan_stream/AnalogueIceSafezone.wav".to_string(),
+            "/home/joffy/Work/repan_stream/3.wav".to_string(),
+        ]);
+    }
 }
