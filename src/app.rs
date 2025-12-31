@@ -5,6 +5,7 @@ use leptos_router::{
     StaticSegment,
 };
 use uuid::Uuid;
+use web_sys::{RtcDataChannel, RtcPeerConnection};
 
 use crate::frontend::{
     calendar::Calendar, jamselector::JamSelector, track_list::TrackList, webrtc::OfferComp,
@@ -55,6 +56,9 @@ pub fn App() -> impl IntoView {
 /// Renders the home page of your application.
 #[component]
 fn HomePage() -> impl IntoView {
+    let (pc, pc_set) = signal_local::<Option<RtcPeerConnection>>(None);
+    let (dc, dc_set) = signal_local::<Option<RtcDataChannel>>(None);
+
     let (started, set_started) = signal(false);
 
     let (selected_day, set_selected_day) = signal(String::new());
@@ -63,7 +67,12 @@ fn HomePage() -> impl IntoView {
     let uuid = Uuid::new_v4();
     let uuid = uuid.as_u128().to_string();
     let (user_id, _) = signal(uuid);
+    //*pc_set.write() = Some(RtcPeerConnection::new().unwrap());
 
+    provide_context(dc_set);
+    provide_context(dc);
+    provide_context(pc_set);
+    provide_context(pc);
     provide_context(set_selected_day);
 
     view! {

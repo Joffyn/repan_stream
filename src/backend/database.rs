@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
 use rusqlite::types::FromSql;
 #[cfg(feature = "ssr")]
-use rusqlite::{Connection, Error, Result, ToSql};
+use rusqlite::{Connection, Error, Result, Row, ToSql};
 #[cfg(feature = "ssr")]
 use std::fmt;
 #[cfg(feature = "ssr")]
@@ -69,6 +69,41 @@ impl From<rusqlite::Error> for DatabaseError {
         todo!()
     }
 }
+#[cfg(feature = "ssr")]
+pub trait FromRow: Sized {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self>;
+}
+#[cfg(feature = "ssr")]
+impl FromRow for i64 {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        row.get(0)
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl FromRow for u64 {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        row.get(0)
+    }
+}
+//#[cfg(feature = "ssr")]
+//impl FromRow for i32 {
+//    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+//        row.get(0)
+//    }
+//}
+#[cfg(feature = "ssr")]
+impl FromRow for String {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        row.get(0)
+    }
+}
+#[cfg(feature = "ssr")]
+impl FromRow for (String, String) {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok((row.get(0)?, row.get(1)?))
+    }
+}
 
 #[cfg(feature = "ssr")]
 pub struct Database {
@@ -81,6 +116,16 @@ impl Database {
     fn new(conn: Connection) -> Self {
         Database { conn }
     }
+    //#[cfg(feature = "ssr")]
+    //pub fn query_two(&mut self) -> Result<Vec<JamQueryResult<(String, String)>>, rusqlite::Error> {
+
+    //    let sql = "SELECT date, path, id FROM jams WHERE jam_id = ?2".to_string();
+    //    let mut stmt = self.conn.prepare(&sql)?;
+    //    stmt.query(params)
+
+
+    //    Ok(())
+    //}
 
     #[cfg(feature = "ssr")]
     pub fn query<T>(
@@ -89,11 +134,11 @@ impl Database {
         amount: QueryAmount,
     ) -> Result<Vec<JamQueryResult<T>>, rusqlite::Error>
     where
-        T: FromSql,
+        T: FromSql
     {
         let (sql, params): (String, Vec<rusqlite::types::Value>) = match (target, amount)
         {
-            (QueryTarget::Date, QueryAmount::All) =>
+            (QueryTarget::Date, QueryAmount::All) => 
             (
                 "SELECT date, id FROM jams".to_string(),
                 vec![],
@@ -125,7 +170,7 @@ impl Database {
             ),
             (QueryTarget::Path, QueryAmount::One(date)) =>
             (
-                "SELECT path, id FROM WHERE jams WHERE date = ?1".to_string(),
+                "SELECT path, id FROM jams WHERE date = ?1".to_string(),
                 vec![date.into()],
             ),
             (QueryTarget::Track(jam_id), QueryAmount::All) =>
@@ -144,6 +189,8 @@ impl Database {
         let mut stmt = self.conn.prepare(&sql)?;
         let params_refs: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
         let rows = stmt.query_map(&*params_refs, |row| {
+            //let data = T::from_row(row)?;
+            //let id: i64 = row.get("id")?;
             Ok(JamQueryResult {
                 data: row.get(0)?,
                 id: row.get(1)?,

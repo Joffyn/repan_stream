@@ -3,29 +3,28 @@ use leptos::server;
 
 #[cfg(feature = "ssr")]
 use crate::backend::database::get_database;
-use crate::backend::database::{QueryAmount, JamQueryResult, QueryTarget};
-
+use crate::backend::database::{JamQueryResult, QueryAmount, QueryTarget};
 
 #[server(GetAllJams)]
-pub async fn get_all_jams() -> Result<Vec<JamQueryResult<String>>, ServerFnError>
-{
+pub async fn get_all_jams() -> Result<Vec<JamQueryResult<String>>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Date, QueryAmount::All)?;
     Ok(res)
 }
 #[server(GetAllJamsFromMonth)]
-pub async fn get_all_jams_month(yearmonth: String) -> Result<Vec<JamQueryResult<String>>, ServerFnError>
-{
+pub async fn get_all_jams_month(
+    yearmonth: String,
+) -> Result<Vec<JamQueryResult<String>>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Date, QueryAmount::Month(yearmonth))?;
     Ok(res)
 }
 #[server(GetAllJamsFromMonthAsDays)]
-pub async fn get_all_days_with_jams(yearmonth: String)
--> Result<Vec<JamQueryResult<u32>>, ServerFnError>
-{
+pub async fn get_all_days_with_jams(
+    yearmonth: String,
+) -> Result<Vec<JamQueryResult<u32>>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Date, QueryAmount::MonthDays(yearmonth))?;
@@ -33,33 +32,38 @@ pub async fn get_all_days_with_jams(yearmonth: String)
 }
 
 #[server(GetAllJamsFromDay)]
-pub async fn get_all_jams_from_day(ymd: String) -> Result<Vec<JamQueryResult<String>>, ServerFnError>
-{
-
+pub async fn get_all_jams_from_day(
+    ymd: String,
+) -> Result<Vec<JamQueryResult<String>>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Date, QueryAmount::Day(ymd))?;
     Ok(res)
 }
 #[server(GetJam)]
-pub async fn get_jam() -> Result<JamQueryResult<String>, ServerFnError>
-{
+pub async fn get_jam() -> Result<JamQueryResult<String>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Date, QueryAmount::All)?;
     Ok(res.first().expect("At least one jam to exist").clone())
 }
+
+#[server(GetJamPath)]
+pub async fn get_jam_path(jam_date: String) -> Result<JamQueryResult<String>, ServerFnError> {
+    let mut db = get_database()?;
+
+    let res = db.query(QueryTarget::Path, QueryAmount::One(jam_date))?;
+    Ok(res.first().expect("At least one jam to exist").clone())
+}
 #[server(GetTracks)]
-pub async fn get_tracks(id: i64) -> Result<Vec<JamQueryResult<String>>, ServerFnError>
-{
+pub async fn get_tracks(id: i64) -> Result<Vec<JamQueryResult<String>>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Track(id), QueryAmount::All)?;
     Ok(res)
 }
 #[server(GetTrackList)]
-pub async fn get_track_list(jam_id: i64) -> Result<Vec<JamQueryResult<String>>, ServerFnError>
-{
+pub async fn get_track_list(jam_id: i64) -> Result<Vec<JamQueryResult<String>>, ServerFnError> {
     let mut db = get_database()?;
 
     let res = db.query(QueryTarget::Track(jam_id), QueryAmount::All)?;
@@ -75,4 +79,3 @@ pub async fn get_track_list(jam_id: i64) -> Result<Vec<JamQueryResult<String>>, 
 //    let tracks = db.query(QueryTarget::Track(), amount)
 //    Ok(res)
 //}
-

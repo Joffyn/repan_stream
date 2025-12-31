@@ -1,4 +1,7 @@
-use std::sync::{Arc, Weak};
+use std::{
+    cell::RefCell,
+    sync::{Arc, RwLock, Weak},
+};
 
 use anyhow::{Context, anyhow, bail};
 use async_tungstenite::tungstenite;
@@ -10,7 +13,8 @@ use gstreamer::{
     glib::{self, GString},
 };
 use gstreamer_webrtc::{
-    WebRTCSDPType, WebRTCSessionDescription, ffi::GstWebRTCDataChannel, gst::Message, gst_sdp,
+    WebRTCDataChannel, WebRTCSDPType, WebRTCSessionDescription, ffi::GstWebRTCDataChannel,
+    gst::Message, gst_sdp,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{
@@ -65,6 +69,7 @@ pub struct UserConnectionInner {
     webrtcbin: gst::Element,
     send_msg_tx: mpsc::UnboundedSender<tungstenite::Message>,
     pipeline_stream: Arc<Mutex<BusStream>>,
+    dc: std::sync::Mutex<Option<WebRTCDataChannel>>,
 }
 impl Drop for UserConnectionInner {
     fn drop(&mut self) {
@@ -117,6 +122,7 @@ impl UserConn {
             webrtcbin,
             send_msg_tx,
             pipeline_stream: Arc::new(Mutex::new(pipeline_stream)),
+            dc: std::sync::Mutex::new(None),
         }));
         println!("User connection created");
         let (tx, rx) = mpsc::channel::<String>(128);
@@ -135,17 +141,21 @@ impl UserConn {
                     .unwrap();
 
                 //let sender = tx.clone();
+                let conn_clone = conn.downgrade();
                 dc.connect_on_message_string(move |_, msg| {
+                    let conn = upgrade_weak!(conn_clone);
                     if let Some(msg) = msg {
                         conn.parse_data_channel_msg(msg.to_string());
                     } else {
                         println!("Message incoming from datachannel was None");
                     }
                 });
+                *conn.dc.lock().unwrap() = Some(dc.clone());
                 let num = values.len();
                 println!("Number of messages on-data-channel: {:?}", num);
                 None
             });
+
         conn.webrtcbin
             .connect("on-new-transceiver", false, |values| {
                 for v in values {
@@ -316,6 +326,21 @@ impl UserConn {
         self.webrtcbin
             .emit_by_name::<()>("add-ice-candidate", &[&mlineindex, &candidate]);
     }
+    pub fn send_data_channel_msg(&self, msg: &str) {
+        let guard = self.clone();
+        let guard = guard.dc.lock().unwrap();
+        let dc = guard.clone().unwrap();
+        dc.send_string_full(Some(msg)).unwrap();
+        //let conn_clone = self.downgrade();
+        //dc.connect_on_message_string(move |_, msg| {
+        //    let conn = upgrade_weak!(conn_clone);
+        //    if let Some(msg) = msg {
+        //        conn.parse_data_channel_msg(msg.to_string());
+        //    } else {
+        //        println!("Message incoming from datachannel was None");
+        //    }
+        //});
+    }
     fn change_audio_src(&self, tracks: &[String]) -> Result<(), anyhow::Error> {
         for (index, track) in tracks.iter().enumerate() {
             let desc = format!(
@@ -340,6 +365,7 @@ impl UserConn {
         Ok(())
     }
     fn parse_data_channel_msg(&self, unparsed_msg: String) {
+        println!("{}", unparsed_msg.as_str());
         self.change_audio_src(&[
             "/home/joffy/Work/repan_stream/AnalogueIceSafezone.wav".to_string(),
             "/home/joffy/Work/repan_stream/3.wav".to_string(),

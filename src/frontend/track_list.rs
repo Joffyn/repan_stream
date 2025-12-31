@@ -1,14 +1,12 @@
+use crate::backend::{database::JamQueryResult, serverfunctions::get_track_list};
 use leptos::prelude::*;
-use crate::backend::{database::JamQueryResult, serverfunctions::get_track_list}; 
 
 #[component]
-pub fn TrackList(selected_jam_id: ReadSignal<i64>) -> impl IntoView
-{
-    let tracks_res = Resource::new(move || selected_jam_id.get() ,  move|_| 
-        async move { 
-
-            get_track_list(selected_jam_id.get()).await
-        });
+pub fn TrackList(selected_jam_id: ReadSignal<i64>) -> impl IntoView {
+    let tracks_res = Resource::new(
+        move || selected_jam_id.get(),
+        move |_| async move { get_track_list(selected_jam_id.get()).await },
+    );
     view! {
         <Suspense fallback=move || {
             view! { <p>"Loading..."</p> }
