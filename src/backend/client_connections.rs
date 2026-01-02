@@ -59,6 +59,11 @@ pub enum GstJsonMsg {
         #[serde(rename = "type")]
         r#type: String,
     },
+    ChangeJam {
+        path: String,
+        date: String,
+        tracks: Vec<String>,
+    },
 }
 
 #[server(GetGstSdpAnswer)]

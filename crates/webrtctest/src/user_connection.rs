@@ -23,7 +23,7 @@ use tokio::sync::{
 };
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::pipeline_handler::RepanSink;
+use crate::pipeline_handler::{GstJsonMsg, RepanSink};
 
 const STUN_SERVER: &str = "stun://stun.l.google.com:19302";
 
@@ -42,20 +42,25 @@ macro_rules! upgrade_weak {
 }
 
 // JSON messages we communicate with
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase", untagged)]
-enum JsonMsg {
-    Ice {
-        candidate: String,
-        #[serde(rename = "sdpMLineIndex")]
-        sdp_mline_index: u32,
-    },
-    Sdp {
-        #[serde(rename = "type")]
-        type_: String,
-        sdp: String,
-    },
-}
+//#[derive(Serialize, Deserialize)]
+//#[serde(rename_all = "lowercase", untagged)]
+//enum JsonMsg {
+//    Ice {
+//        candidate: String,
+//        #[serde(rename = "sdpMLineIndex")]
+//        sdp_mline_index: u32,
+//    },
+//    Sdp {
+//        #[serde(rename = "type")]
+//        type_: String,
+//        sdp: String,
+//    },
+//    ChangeJam {
+//        path: String,
+//        date: String,
+//        tracks: Vec<String>,
+//    },
+//}
 
 #[derive(Debug, Clone)]
 pub struct UserConn(Arc<UserConnectionInner>);
@@ -342,6 +347,7 @@ impl UserConn {
         //});
     }
     fn change_audio_src(&self, tracks: &[String]) -> Result<(), anyhow::Error> {
+        self.pipeline.set_state(gstreamer::State::Paused);
         for (index, track) in tracks.iter().enumerate() {
             let desc = format!(
                 r#"filesrc location={track} !
@@ -362,13 +368,19 @@ impl UserConn {
             src.link(&mix_pad).unwrap();
             bin.sync_state_with_parent().unwrap();
         }
+        self.pipeline.set_state(gstreamer::State::Playing);
         Ok(())
     }
     fn parse_data_channel_msg(&self, unparsed_msg: String) {
-        println!("{}", unparsed_msg.as_str());
-        self.change_audio_src(&[
-            "/home/joffy/Work/repan_stream/AnalogueIceSafezone.wav".to_string(),
-            "/home/joffy/Work/repan_stream/3.wav".to_string(),
-        ]);
+        if let Ok(GstJsonMsg::ChangeJam { path, date, tracks }) =
+            serde_json::from_str(unparsed_msg.as_str())
+        {
+            let tracks: Vec<String> = tracks
+                .iter()
+                .map(move |s| format!("{}{}-{}.wav", path, s, date))
+                .collect();
+            println!("{:?}", tracks);
+            self.change_audio_src(tracks.as_slice());
+        }
     }
 }

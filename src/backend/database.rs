@@ -2,6 +2,7 @@
 use rusqlite::types::FromSql;
 #[cfg(feature = "ssr")]
 use rusqlite::{Connection, Error, Result, Row, ToSql};
+use serde::de::value;
 #[cfg(feature = "ssr")]
 use std::fmt;
 #[cfg(feature = "ssr")]
@@ -22,6 +23,16 @@ const DB_PATH: &str = "/home/joffy/Work/repan_stream/";
 //}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QueryResult {
+    Id(i64),
+    Path(String),
+    Date(String),
+    Tracks(Vec<String>)
+
+}
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JamQueryResult<T> {
     pub id: i64,
     pub data: T,
@@ -33,11 +44,18 @@ pub enum QueryTarget {
     Path,
     Track(i64),
 }
+#[derive(Debug)]
+pub enum QueryType {
+    FromDate(String),
+    FromPath(String),
+    FromID(i64),
+    FromStem(String)
+}
 
 #[derive(Debug)]
 pub enum QueryAmount {
     All,
-    One(String),
+    One(QueryType),
     Month(String),
     MonthDays(String),
     Day(String),
@@ -64,7 +82,7 @@ impl std::error::Error for DatabaseError {}
 
 #[cfg(feature = "ssr")]
 impl From<rusqlite::Error> for DatabaseError {
-    #[cfg(feature = "ssr")]
+#[cfg(feature = "ssr")]
     fn from(_: rusqlite::Error) -> Self {
         todo!()
     }
@@ -126,6 +144,10 @@ impl Database {
 
     //    Ok(())
     //}
+    //#[cfg(feature = "ssr")]
+    //pub fn query(target: QueryTarget,) -> Result<QueryResult, rusqlite::Error> {
+
+    //}
 
     #[cfg(feature = "ssr")]
     pub fn query<T>(
@@ -143,10 +165,15 @@ impl Database {
                 "SELECT date, id FROM jams".to_string(),
                 vec![],
             ),
-            (QueryTarget::Date, QueryAmount::One(path)) =>
+            (QueryTarget::Date, QueryAmount::One(QueryType::FromPath(path))) =>
             (
                 "SELECT date, id FROM jams WHERE path = ?1".to_string(),
                 vec![path.into()],
+            ),
+            (QueryTarget::Date, QueryAmount::One(QueryType::FromID(id))) =>
+            (
+                "SELECT date, id FROM jams WHERE id = ?1".to_string(),
+                vec![id.into()],
             ),
             (QueryTarget::Date, QueryAmount::Month(yearmonth)) =>
             (
@@ -168,17 +195,22 @@ impl Database {
                 "SELECT path, id FROM jams".to_string(),
                 vec![],
             ),
-            (QueryTarget::Path, QueryAmount::One(date)) =>
+            (QueryTarget::Path, QueryAmount::One(QueryType::FromDate(date))) =>
             (
                 "SELECT path, id FROM jams WHERE date = ?1".to_string(),
                 vec![date.into()],
+            ),
+            (QueryTarget::Path, QueryAmount::One(QueryType::FromID(id))) =>
+            (
+                "SELECT path, id FROM jams WHERE id = ?1".to_string(),
+                vec![id.into()],
             ),
             (QueryTarget::Track(jam_id), QueryAmount::All) =>
             (
                 "SELECT track, id FROM tracks WHERE jam_id = ?1".to_string(),
                 vec![jam_id.into()],
             ),
-            (QueryTarget::Track(jam_id), QueryAmount::One(stem)) =>
+            (QueryTarget::Track(jam_id), QueryAmount::One(QueryType::FromStem(stem))) =>
             (
                 "SELECT track, id FROM tracks WHERE jam_id = ?1 AND track = ?2".to_string(),
                 vec![jam_id.into(), stem.into()],
@@ -189,8 +221,6 @@ impl Database {
         let mut stmt = self.conn.prepare(&sql)?;
         let params_refs: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
         let rows = stmt.query_map(&*params_refs, |row| {
-            //let data = T::from_row(row)?;
-            //let id: i64 = row.get("id")?;
             Ok(JamQueryResult {
                 data: row.get(0)?,
                 id: row.get(1)?,

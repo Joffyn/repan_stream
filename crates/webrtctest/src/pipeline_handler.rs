@@ -24,7 +24,7 @@ struct ClientMessage {
 // JSON messages we communicate with
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-enum GstJsonMsg {
+pub enum GstJsonMsg {
     Ice {
         candidate: String,
         #[serde(rename = "sdpMLineIndex")]
@@ -34,6 +34,11 @@ enum GstJsonMsg {
         sdp: String,
         #[serde(rename = "type")]
         r#type: String,
+    },
+    ChangeJam {
+        path: String,
+        date: String,
+        tracks: Vec<String>,
     },
 }
 
@@ -158,6 +163,7 @@ impl Connection {
 
                 Ok(())
             }
+            _ => Ok(()),
         }
     }
     async fn handle_user_messages(&self, user_conn: UserConn) {}

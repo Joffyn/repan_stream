@@ -1,9 +1,5 @@
-use crate::backend::{
-    database::JamQueryResult,
-    serverfunctions::{get_all_jams_from_day, get_jam_path},
-};
+use crate::backend::{database::JamQueryResult, serverfunctions::get_all_jams_from_day};
 use leptos::{logging::log, prelude::*};
-use web_sys::RtcDataChannel;
 
 #[component]
 pub fn JamSelector(
@@ -14,14 +10,6 @@ pub fn JamSelector(
         move || selected_day.get(),
         move |_| async move { get_all_jams_from_day(selected_day.get()).await },
     );
-    //let (path, set_path) = signal(String::new());
-
-    //let jam_path = Resource::new(
-    //    move || path.get(),
-    //    move |_| async move { get_jam_path(path.get()).await },
-    //);
-    let dc = use_context::<ReadSignal<Option<RtcDataChannel>, LocalStorage>>()
-        .expect("to have found getter");
     view! {
         <Suspense fallback=move || {
             view! { <p>"Loading..."</p> }
